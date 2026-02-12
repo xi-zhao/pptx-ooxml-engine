@@ -9,13 +9,84 @@
       "op": "create_slide_on_layout",
       "layout_index": 0,
       "title": "执行摘要",
-      "body": "请在此填入本页摘要内容。"
+      "body": "原生 OOXML 执行样例"
     },
     {
-      "op": "create_slide_on_layout",
-      "layout_index": 0,
-      "title": "关键结论",
-      "body": "请在此填入关键结论。"
+      "op": "set_slide_background",
+      "slide_index": 0,
+      "color_hex": "0B1D3A"
+    },
+    {
+      "op": "add_shape",
+      "slide_index": 0,
+      "shape_type": "rect",
+      "x_inches": 0.8,
+      "y_inches": 2.1,
+      "width_inches": 2.5,
+      "height_inches": 1.0,
+      "name": "kpi_1",
+      "text": "营收"
+    },
+    {
+      "op": "add_shape",
+      "slide_index": 0,
+      "shape_type": "rect",
+      "x_inches": 4.2,
+      "y_inches": 2.6,
+      "width_inches": 2.5,
+      "height_inches": 1.0,
+      "name": "kpi_2",
+      "text": "利润"
+    },
+    {
+      "op": "add_shape",
+      "slide_index": 0,
+      "shape_type": "rect",
+      "x_inches": 7.6,
+      "y_inches": 3.1,
+      "width_inches": 2.5,
+      "height_inches": 1.0,
+      "name": "kpi_3",
+      "text": "订单"
+    },
+    {
+      "op": "align_shapes",
+      "slide_index": 0,
+      "shape_names": ["kpi_1", "kpi_2", "kpi_3"],
+      "align": "top"
+    },
+    {
+      "op": "distribute_shapes",
+      "slide_index": 0,
+      "shape_names": ["kpi_1", "kpi_2", "kpi_3"],
+      "direction": "horizontal"
+    },
+    {
+      "op": "add_textbox",
+      "slide_index": 0,
+      "x_inches": 0.8,
+      "y_inches": 4.0,
+      "width_inches": 5.2,
+      "height_inches": 2.0,
+      "paragraphs": [
+        {"text": "关键结论", "font_size_pt": 22, "bold": true},
+        {"text": "支持模板与版式生成", "list_type": "bullet", "level": 1},
+        {"text": "支持结构化排版操作", "list_type": "number", "level": 1}
+      ]
+    },
+    {
+      "op": "add_table",
+      "slide_index": 0,
+      "x_inches": 6.2,
+      "y_inches": 4.0,
+      "width_inches": 6.2,
+      "height_inches": 2.0,
+      "data": [
+        ["指标", "值"],
+        ["营收", "1148亿"],
+        ["研发占比", "45%"]
+      ],
+      "header": true
     }
   ]
 }

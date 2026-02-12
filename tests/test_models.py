@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def test_parse_copy_and_create_ops() -> None:
     from pptx_ooxml_engine.models import parse_ops, parse_plan
@@ -43,6 +45,72 @@ def test_parse_copy_and_create_ops() -> None:
                     "op": "set_notes",
                     "slide_index": 0,
                     "text": "讲稿"
+                },
+                {
+                    "op": "add_textbox",
+                    "slide_index": 0,
+                    "x_inches": 1,
+                    "y_inches": 1,
+                    "width_inches": 4,
+                    "height_inches": 2,
+                    "paragraphs": [
+                        {"text": "一级", "list_type": "bullet", "level": 0},
+                        {"text": "二级", "list_type": "number", "level": 1}
+                    ]
+                },
+                {
+                    "op": "set_shape_text",
+                    "slide_index": 0,
+                    "shape_name": "content_box",
+                    "paragraphs": [
+                        {"text": "更新正文", "font_size_pt": 18, "alignment": "center"}
+                    ]
+                },
+                {
+                    "op": "add_shape",
+                    "slide_index": 0,
+                    "shape_type": "rect",
+                    "x_inches": 1,
+                    "y_inches": 1,
+                    "width_inches": 1,
+                    "height_inches": 1
+                },
+                {
+                    "op": "add_table",
+                    "slide_index": 0,
+                    "x_inches": 1,
+                    "y_inches": 1,
+                    "width_inches": 5,
+                    "height_inches": 2,
+                    "data": [["A", "B"], ["1", "2"]]
+                },
+                {
+                    "op": "add_image",
+                    "slide_index": 0,
+                    "image_path": "/tmp/a.png",
+                    "x_inches": 1,
+                    "y_inches": 1,
+                    "width_inches": 2,
+                    "height_inches": 1,
+                    "fit": "cover"
+                },
+                {
+                    "op": "set_slide_background",
+                    "slide_index": 0,
+                    "color_hex": "112233"
+                },
+                {
+                    "op": "align_shapes",
+                    "slide_index": 0,
+                    "shape_names": ["a", "b"],
+                    "align": "middle",
+                    "reference": "slide"
+                },
+                {
+                    "op": "distribute_shapes",
+                    "slide_index": 0,
+                    "shape_names": ["a", "b", "c"],
+                    "direction": "horizontal"
                 }
             ],
         }
@@ -51,7 +119,7 @@ def test_parse_copy_and_create_ops() -> None:
     ops = parse_ops(plan.model_dump())
     assert plan.template_pptx == "/tmp/template_master.pptx"
     assert plan.reuse_slide_libraries == ["/tmp/reuse_library_a.pptx"]
-    assert len(ops) == 7
+    assert len(ops) == 15
     assert ops[0].op == "copy_slide"
     assert ops[0].reuse_library_index == 0
     assert ops[1].op == "delete_slide"
@@ -60,3 +128,28 @@ def test_parse_copy_and_create_ops() -> None:
     assert ops[4].op == "set_slide_size"
     assert ops[5].op == "set_slide_layout"
     assert ops[6].op == "set_notes"
+    assert ops[7].op == "add_textbox"
+    assert ops[8].op == "set_shape_text"
+    assert ops[9].op == "add_shape"
+    assert ops[10].op == "add_table"
+    assert ops[11].op == "add_image"
+    assert ops[12].op == "set_slide_background"
+    assert ops[13].op == "align_shapes"
+    assert ops[14].op == "distribute_shapes"
+
+
+def test_set_shape_text_requires_shape_target() -> None:
+    from pptx_ooxml_engine.models import parse_plan
+
+    with pytest.raises(ValueError):
+        parse_plan(
+            {
+                "operations": [
+                    {
+                        "op": "set_shape_text",
+                        "slide_index": 0,
+                        "text": "missing target",
+                    }
+                ]
+            }
+        )

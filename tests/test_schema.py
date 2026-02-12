@@ -23,5 +23,13 @@ def test_load_ops_schema() -> None:
         "set_slide_size",
         "set_slide_layout",
         "set_notes",
+        "add_textbox",
+        "set_shape_text",
+        "add_image",
+        "add_shape",
+        "add_table",
+        "set_slide_background",
+        "align_shapes",
+        "distribute_shapes",
     }
     assert expected.issubset(op_consts)

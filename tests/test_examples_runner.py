@@ -7,11 +7,11 @@ from pathlib import Path
 from pptx import Presentation
 
 
-def test_generate_example_outputs_creates_two_valid_pptx(tmp_path: Path) -> None:
+def test_generate_example_outputs_creates_valid_pptx(tmp_path: Path) -> None:
     from pptx_ooxml_engine.examples_runner import generate_example_outputs
 
     outputs = generate_example_outputs(tmp_path)
-    assert len(outputs) == 2
+    assert len(outputs) >= 1
     for output in outputs:
         assert output.exists()
         prs = Presentation(str(output))
@@ -35,5 +35,5 @@ def test_examples_runner_module_cli(tmp_path: Path) -> None:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    assert (tmp_path / "example_01.pptx").exists()
-    assert (tmp_path / "example_02.pptx").exists()
+    generated = sorted(tmp_path.glob("example_*.pptx"))
+    assert len(generated) >= 1

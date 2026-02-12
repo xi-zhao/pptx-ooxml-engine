@@ -1,384 +1,288 @@
-# pptx-ooxml-engine Specification (v0.1.0)
-
-Status: Draft (implementation-aligned)  
-Last Updated: 2026-02-12
+# pptx-ooxml-engine Specification (v1.0.0)
 
 ## 1. Purpose / 目标
 
-`pptx-ooxml-engine` 是一个 **原生 OOXML 的 PPTX 生成与改写执行引擎**。
+`pptx-ooxml-engine` 是一个原生 OOXML 执行引擎，用于按结构化操作计划生成与改写 `.pptx` 文件。
 
-它的核心职责是：
+核心目标：
+- 原生操作 PPTX，不走 HTML 渲染链路
+- 适配 LLM/Agent 调用（输入是结构化 op plan）
+- 保持执行确定性和可验证性
 
-- 接收结构化操作计划（operation plan）
-- 在 `.pptx` 上按顺序执行操作
-- 产出新的 `.pptx`
-- 在需要时进行结构完整性校验
+## 2. Positioning / 定位
 
-它**不负责**：
+这是执行层，不是规划层。
 
-- LLM 内容生成
-- 知识库检索与推理
-- 页面排版策略规划（上层 planner 负责）
+- 上层负责：大纲、内容策略、页库匹配、研究信息融合
+- 本层负责：按顺序执行 ops，产出可打开且结构正确的 PPTX
 
-## 2. Scope / 边界定义
+`template_pptx` 语义：
+- 指母版/版式模板（master/layout template）
+- 不是复用页库
 
-### 2.1 In Scope
+## 3. Runtime & Dependencies / 运行依赖
 
-- 基于模板（master/layout）进行页面生成和改写
-- 跨文件复制页面（`copy_slide`）
-- 通过 layout 新建页面（`create_slide_on_layout`）
-- 文本替换改写（`rewrite_text`）
-- 删除页面（`delete_slide`）
-- 页面重排（`move_slide`）
-- 页面尺寸设置（`set_slide_size`）
-- 页面版式重设（`set_slide_layout`）
-- 备注写入（`set_notes`）
-- OOXML 结构级校验（`verify_pptx`）
-- Python API + CLI 执行入口
+- Python >= 3.10
+- `python-pptx>=1.0.2`
+- `pydantic>=2.8.0`
+- `pptx-copy-ops`：仅在 `copy_slide` 操作出现时按需加载
 
-### 2.2 Out of Scope
+## 4. Data Model / 数据模型
 
-- 智能版式决策（例如“选哪个 layout 最优”）
-- 深度图文自动设计
-- 复杂动画与时间线编排
-- 外部 Office GUI 自动化验证（当前版本未内置）
-
-## 3. Terminology / 术语
-
-- `template_pptx`: **母版模板文件**（master/layout 来源），不是复用页本身。
-- `reuse_slide_libraries`: 可复用页面库列表（历史 PPT 或页库文件）。
-- `operation`: 单个原子操作（copy/create/rewrite/delete/move/size/layout/notes）。
-- `operation plan`: 顶层执行计划对象，包含模板、页库和操作列表。
-- `verify`: 执行后结构校验步骤。
-
-## 4. Runtime Dependencies / 运行依赖
-
-- Python `>=3.10`
-- `python-pptx >= 1.0.2`
-- `pydantic >= 2.8.0`
-- `pptx-copy-ops`（仅 `copy_slide` 所需）
-
-## 5. Data Model / 数据模型
-
-顶层计划对象（`OperationPlan`）：
+顶层对象 `OperationPlan`：
 
 ```json
 {
   "template_pptx": "path/to/template.pptx",
-  "reuse_slide_libraries": ["path/to/reuse_lib_1.pptx"],
+  "reuse_slide_libraries": ["path/to/lib1.pptx"],
   "operations": []
 }
 ```
 
-字段规范：
-
-| Field | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `template_pptx` | `string \| null` | No | `null` | master/layout 模板路径 |
-| `reuse_slide_libraries` | `string[]` | No | `[]` | 复用页库路径列表 |
-| `operations` | `Operation[]` | Yes | - | 执行操作列表（顺序执行） |
-
-## 6. Operation Specs / 操作规格
-
-## 6.1 `copy_slide`
-
-用途：将外部页面复制到当前输出演示文稿。
-
 字段：
+- `template_pptx`：可选。模板路径，可被 CLI `--template` 覆盖。
+- `reuse_slide_libraries`：可选。复用页库路径数组。
+- `operations`：必填。按顺序执行的操作列表。
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"copy_slide"` | Yes | 操作类型 |
-| `source_path` | `string \| null` | Conditional | 源 PPTX 路径（与 `reuse_library_index` 二选一） |
-| `reuse_library_index` | `int \| null` (`>=0`) | Conditional | 引用 `reuse_slide_libraries` 的索引（与 `source_path` 二选一） |
-| `source_slide_index` | `int` (`>=0`) | Yes | 源页 0-based 索引 |
-| `mode` | `"shape" \| "part"` | No | 默认 `part` |
+## 5. Operations / 操作集
 
-语义：
+### 5.1 Structure Ops / 结构操作
 
-- `mode=part`: 高保真复制，可能引入额外 layout/master。
-- `mode=shape`: 倾向模板统一，视觉可能略有差异。
+- `copy_slide`
+- `create_slide_on_layout`
+- `delete_slide`
+- `move_slide`
+- `set_slide_size`
+- `set_slide_layout`
+- `set_notes`
 
-错误条件：
+### 5.2 Content Ops / 内容操作
 
-- `source_path` 和 `reuse_library_index` 同时缺失。
-- `reuse_library_index` 越界。
-- `source_slide_index` 越界（由底层复制库抛错）。
+- `rewrite_text`
+- `add_textbox`
+- `set_shape_text`
+- `add_image`
+- `add_shape`
+- `add_table`
+- `set_slide_background`
 
-## 6.2 `create_slide_on_layout`
+### 5.3 Layout Ops / 排版操作
 
-用途：基于当前模板指定 layout 新建页面。
+- `align_shapes`
+- `distribute_shapes`
 
-字段：
+## 6. Operation Signatures / 参数签名
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"create_slide_on_layout"` | Yes | 操作类型 |
-| `layout_index` | `int` (`>=0`) | No | 默认 `0` |
-| `title` | `string \| null` | No | 如有标题占位符则写入 |
-| `body` | `string \| null` | No | 优先写 BODY 占位符，否则写入第一个可写文本框 |
+### `copy_slide`
+- Required:
+- `op: "copy_slide"`
+- `source_slide_index: int >= 0`
+- Optional:
+- `source_path: str` 或 `reuse_library_index: int >= 0`（二选一）
+- `mode: "part" | "shape"`（默认 `part`）
 
-错误条件：
+### `create_slide_on_layout`
+- `op: "create_slide_on_layout"`
+- `layout_index: int >= 0`（默认 0）
+- `title?: str`
+- `body?: str`
 
-- `layout_index` 越界。
+### `rewrite_text`
+- `op: "rewrite_text"`
+- `slide_index: int >= 0`
+- `find: str`
+- `replace: str`
+- `shape_name?: str`
+- `occurrence?: "first" | "all"`（默认 `all`）
 
-## 6.3 `rewrite_text`
+### `delete_slide`
+- `op: "delete_slide"`
+- `slide_index: int >= 0`
 
-用途：在指定页面中进行文本替换。
+### `move_slide`
+- `op: "move_slide"`
+- `from_index: int >= 0`
+- `to_index: int >= 0`
 
-字段：
+### `set_slide_size`
+- `op: "set_slide_size"`
+- Required one of:
+- `preset: "16:9" | "4:3"`
+- `width_inches: float > 0` + `height_inches: float > 0`
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"rewrite_text"` | Yes | 操作类型 |
-| `slide_index` | `int` (`>=0`) | Yes | 目标页 0-based 索引 |
-| `find` | `string` | Yes | 查找文本 |
-| `replace` | `string` | Yes | 替换文本 |
-| `shape_name` | `string \| null` | No | 限定 shape 名称 |
-| `occurrence` | `"first" \| "all"` | No | 默认 `all` |
+### `set_slide_layout`
+- `op: "set_slide_layout"`
+- `slide_index: int >= 0`
+- `layout_index: int >= 0`
 
-行为说明：
+### `set_notes`
+- `op: "set_notes"`
+- `slide_index: int >= 0`
+- `text: str`
 
-- 替换以 `shape.text_frame.text` 粒度执行（段落样式不做细粒保留）。
-- 若找不到可替换文本，抛 `ValueError`。
+### `add_textbox`
+- `op: "add_textbox"`
+- `slide_index: int >= 0`
+- `x_inches, y_inches >= 0`
+- `width_inches, height_inches > 0`
+- Required one of:
+- `text: str`
+- `paragraphs: ParagraphSpec[]`
+- Optional:
+- `name?: str`
+- `vertical_anchor?: "top" | "middle" | "bottom"`
+- `word_wrap?: bool`
 
-## 6.4 `delete_slide`
+### `set_shape_text`
+- `op: "set_shape_text"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- Required one of:
+- `text: str`
+- `paragraphs: ParagraphSpec[]`
+- Optional:
+- `vertical_anchor?: "top" | "middle" | "bottom"`
+- `word_wrap?: bool`
 
-用途：按索引删除当前输出中的页面。
+### `add_image`
+- `op: "add_image"`
+- `slide_index: int >= 0`
+- `image_path: str`
+- `x_inches, y_inches >= 0`
+- `width_inches, height_inches > 0`
+- `fit?: "stretch" | "contain" | "cover"`（默认 `stretch`）
+- `name?: str`
 
-字段：
+### `add_shape`
+- `op: "add_shape"`
+- `slide_index: int >= 0`
+- `shape_type: "rect" | "round_rect" | "ellipse" | "right_arrow" | "line"`
+- `x_inches, y_inches >= 0`
+- `width_inches, height_inches > 0`
+- Optional:
+- `name?: str`
+- `text?: str`
+- `fill_color_hex?: RRGGBB | #RRGGBB`
+- `line_color_hex?: RRGGBB | #RRGGBB`
+- `line_width_pt?: float > 0`
+- `text_color_hex?: RRGGBB | #RRGGBB`
+- `font_size_pt?: float > 0`
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"delete_slide"` | Yes | 操作类型 |
-| `slide_index` | `int` (`>=0`) | Yes | 要删除页面的 0-based 索引 |
+### `add_table`
+- `op: "add_table"`
+- `slide_index: int >= 0`
+- `x_inches, y_inches >= 0`
+- `width_inches, height_inches > 0`
+- `data: string[][]`（非空二维数组）
+- Optional:
+- `header?: bool`（默认 `false`，`true` 时首行加粗）
+- `name?: str`
+- `font_size_pt?: float > 0`
 
-行为说明：
+### `set_slide_background`
+- `op: "set_slide_background"`
+- `slide_index: int >= 0`
+- `color_hex: RRGGBB | #RRGGBB`
 
-- 删除通过移除 slide 关系与 slide id 列表条目完成。
-- 典型用途是移除模板初始页。
+### `align_shapes`
+- `op: "align_shapes"`
+- `slide_index: int >= 0`
+- `shape_names: string[]`（至少 2 个）
+- `align: "left" | "center" | "right" | "top" | "middle" | "bottom"`
+- `reference?: "first" | "slide"`（默认 `first`）
 
-错误条件：
+### `distribute_shapes`
+- `op: "distribute_shapes"`
+- `slide_index: int >= 0`
+- `shape_names: string[]`（至少 3 个）
+- `direction: "horizontal" | "vertical"`
 
-- `slide_index` 越界。
+### ParagraphSpec
 
-## 6.5 `move_slide`
-
-用途：在演示文稿内部移动页面顺序。
-
-字段：
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"move_slide"` | Yes | 操作类型 |
-| `from_index` | `int` (`>=0`) | Yes | 原位置索引 |
-| `to_index` | `int` (`>=0`) | Yes | 目标位置索引 |
-
-错误条件：
-
-- `from_index` 或 `to_index` 越界。
-
-## 6.6 `set_slide_size`
-
-用途：设置演示文稿画布尺寸。
-
-字段：
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"set_slide_size"` | Yes | 操作类型 |
-| `preset` | `"16:9" \| "4:3" \| null` | Conditional | 预设尺寸（与自定义尺寸二选一） |
-| `width_inches` | `float \| null` (`>0`) | Conditional | 自定义宽度（英寸） |
-| `height_inches` | `float \| null` (`>0`) | Conditional | 自定义高度（英寸） |
-
-行为说明：
-
-- `preset=16:9` -> `13.333 x 7.5` 英寸
-- `preset=4:3` -> `10 x 7.5` 英寸
-
-错误条件：
-
-- 同时设置 `preset` 与 `width/height`
-- 未设置 `preset` 且未提供 `width/height`
-
-## 6.7 `set_slide_layout`
-
-用途：将指定页面的 layout 关系重绑到目标 layout。
-
-字段：
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"set_slide_layout"` | Yes | 操作类型 |
-| `slide_index` | `int` (`>=0`) | Yes | 目标页面 |
-| `layout_index` | `int` (`>=0`) | Yes | 目标 layout 索引 |
-
-错误条件：
-
-- `slide_index` 越界
-- `layout_index` 越界
-
-## 6.8 `set_notes`
-
-用途：设置页面备注（讲稿区）文本。
-
-字段：
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `op` | `"set_notes"` | Yes | 操作类型 |
-| `slide_index` | `int` (`>=0`) | Yes | 目标页面 |
-| `text` | `string` | Yes | 备注文本 |
-
-错误条件：
-
-- `slide_index` 越界。
+- `text: str`
+- `level?: int(0..8)`
+- `list_type?: "none" | "bullet" | "number"`
+- `font_size_pt?: float > 0`
+- `bold?: bool`
+- `italic?: bool`
+- `color_hex?: RRGGBB | #RRGGBB`
+- `alignment?: "left" | "center" | "right" | "justify"`
+- `line_spacing?: float > 0`
+- `space_before_pt?: float >= 0`
+- `space_after_pt?: float >= 0`
 
 ## 7. Execution Semantics / 执行语义
 
-引擎入口：`apply_ops(...)` 或 `generate_pptx(...)`。
+入口：
+- `apply_ops(...)`
+- `generate_pptx(...)`
 
-执行顺序：
+执行流程：
+1. 解析并验证 plan（Pydantic）
+2. 解析模板路径（优先级：显式参数 > 兼容输入 > plan 字段）
+3. 按序执行 operations
+4. 输出 PPTX
+5. 可选 `verify_pptx` 校验
 
-1. 解析 operation plan
-2. 解析模板路径（优先级见 7.1）
-3. 加载目标模板为输出基底（保留已有页）
-4. 按 `operations` 顺序逐条执行
-5. 保存到 `output_pptx`
-6. 可选执行 `verify_pptx`
+`copy_slide` 依赖加载策略：
+- 仅当 operations 中存在 `copy_slide` 时加载 `pptx-copy-ops`
+- 无 `copy_slide` 时不需要该依赖
 
-### 7.1 Template Resolution Priority
+## 8. Verification / 校验
 
-模板路径解析优先级（高 -> 低）：
+`verify_pptx(path)` 做结构一致性校验，主要包括：
+- 能否被 `python-pptx` 打开
+- slide -> layout -> master 关系完整性
+- dangling relationship 检查
+- 已使用 master 是否在 `presentation.xml` 注册
 
-1. `apply_ops(..., template_pptx=...)`
-2. `apply_ops(..., input_pptx=...)`（兼容别名）
-3. `ops.template_pptx`
+## 9. Public API / 对外 API
 
-如果三者都缺失，报错：`template_pptx is required`。
-
-## 8. Verification Spec / 校验规格
-
-`verify_pptx(path)` 返回 `VerifyReport`：
-
-- `issues: list[str]`
-- `ok: bool` (`issues` 为空时为 `True`)
-
-校验项（v0.1）：
-
-- 文件能被 `python-pptx` 打开
-- `presentation.xml` 存在
-- 每个 slide 的关系引用不悬空（dangling `r:id`）
-- 每个 slide 存在 `slideLayout` 关系
-- 每个 layout 存在 `slideMaster` 关系
-- 使用到的 master 均已在 presentation 中注册
-
-## 9. API Spec / Python API
-
-## 9.1 `apply_ops`
-
-```python
-apply_ops(
-    input_pptx: str | Path | None,
-    ops: Iterable[Operation] | list[dict] | dict,
-    output_pptx: str | Path | None,
-    verify: bool = False,
-    strict_verify: bool = True,
-    template_pptx: str | Path | None = None,
-) -> ApplyResult
-```
-
-返回值 `ApplyResult`：
-
-- `output_path: Path`
-- `operations_applied: int`
-- `verify_issues: list[str]`
-
-## 9.2 `generate_pptx`
-
-```python
-generate_pptx(
-    template_pptx: str | Path,
-    ops: Iterable[Operation] | list[dict] | dict,
-    output_pptx: str | Path,
-    verify: bool = False,
-    strict_verify: bool = True,
-) -> ApplyResult
-```
-
-说明：`generate_pptx` 是面向“模板驱动生成”语义的主入口。
-
-## 9.3 Other Public APIs
-
+Python：
+- `apply_ops(...) -> ApplyResult`
+- `generate_pptx(...) -> ApplyResult`
 - `parse_plan(raw) -> OperationPlan`
 - `parse_ops(raw) -> list[Operation]`
 - `load_ops_schema(version="v1") -> dict`
 - `verify_pptx(path) -> VerifyReport`
-- `generate_example_outputs(output_dir) -> list[Path]`
 
-## 10. CLI Spec
-
-命令：
+CLI：
 
 ```bash
 python -m pptx_ooxml_engine.cli \
+  --template path/to/template.pptx \
   --ops-file ops.json \
-  --output out.pptx \
-  [--template template.pptx] \
-  [--verify] \
-  [--no-strict-verify]
+  --output output.pptx \
+  --verify
 ```
 
 参数：
+- `--ops-file`：必填，ops JSON
+- `--output`：必填，输出文件
+- `--template`：可选，覆盖 `ops.template_pptx`
+- `--verify`：可选，执行校验
+- `--no-strict-verify`：可选，校验报错不终止
+- `--version`：输出版本
 
-| Arg | Required | Description |
-|---|---|---|
-| `--ops-file` | Yes | operation plan JSON 文件 |
-| `--output` | Yes | 输出 pptx 路径 |
-| `--template` | No | 覆盖 `ops.template_pptx` |
-| `--verify` | No | 执行后运行结构校验 |
-| `--no-strict-verify` | No | 即使校验有 issue 也不失败 |
-| `--version` | No | 输出版本 |
+## 10. Error Model / 错误模型
 
-兼容参数：
+典型错误：
+- `ValueError`：操作参数不合法、文本找不到、shape 定位失败
+- `IndexError`：slide/layout/shape 索引越界
+- `FileNotFoundError`：图片路径不存在
+- `ModuleNotFoundError`：执行 `copy_slide` 但缺少 `pptx-copy-ops`
 
-- `--input` 为 `--template` 的隐藏别名（兼容老用法）。
+## 11. Determinism / 确定性
 
-## 11. JSON Schema
+在同样模板文件、同样 ops、同样依赖版本下，输出结果应稳定可复现。
 
-路径：
+## 12. Layering Recommendation / 分层建议
 
-- `src/pptx_ooxml_engine/schemas/ops.v1.json`
+推荐三层：
+- Planner Layer：用户意图 -> 大纲 -> op plan
+- Retrieval Layer：知识库/复用页库/deep research
+- Execution Layer：`pptx-ooxml-engine`
 
-版本管理建议：
-
-- 不破坏兼容的新增字段：维持 `v1`
-- 破坏兼容：新增 `ops.v2.json`
-
-## 12. Error Model / 错误模型
-
-常见异常：
-
-- `ModuleNotFoundError`: 缺少 `pptx-copy-ops`（在 `copy_slide` 场景）
-- `ValueError`: 参数不合法（如无模板、替换未命中等）
-- `IndexError`: slide/layout/library 索引越界
-- `ValueError("verification failed: ...")`: `verify=True` 且 `strict_verify=True` 且校验失败
-
-## 13. Determinism / 确定性
-
-在同样输入文件、同样操作计划、同样依赖版本下，执行顺序与结果应保持稳定。  
-引擎不引入随机行为。
-
-## 14. Known Limitations / 已知限制
-
-- `rewrite_text` 以整 text_frame 字符串替换，非富文本级编辑
-- 不含页面删除/重排等高级结构操作
-- 未内置 Office GUI 实机打开验证
-- 不负责自动选择“最佳 layout”与美学排版策略
-
-## 15. Layering Recommendation / 分层建议
-
-- `pptx-ooxml-engine`: 执行层（本库）
-- 上层 planner/agent: 决策层（大纲、内容、版式策略、检索与推理）
-
-该分层是长期可维护和可开源协作的推荐架构。
+该库仅承担第三层职责，保持可组合性与可维护性。

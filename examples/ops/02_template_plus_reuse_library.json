@@ -15,10 +15,42 @@
       "mode": "shape"
     },
     {
+      "op": "set_notes",
+      "slide_index": 0,
+      "text": "此页来自复用页库。"
+    },
+    {
       "op": "create_slide_on_layout",
       "layout_index": 0,
-      "title": "新增分析页",
-      "body": "这里由上层规划器生成内容，然后由引擎执行排版。"
+      "title": "新增分析页"
+    },
+    {
+      "op": "add_textbox",
+      "slide_index": 1,
+      "x_inches": 0.8,
+      "y_inches": 1.8,
+      "width_inches": 8.0,
+      "height_inches": 2.8,
+      "paragraphs": [
+        {"text": "融合策略", "font_size_pt": 24, "bold": true},
+        {"text": "复用页优先", "list_type": "bullet", "level": 1},
+        {"text": "无复用时自动生成", "list_type": "bullet", "level": 1}
+      ]
+    },
+    {
+      "op": "add_shape",
+      "slide_index": 1,
+      "shape_type": "right_arrow",
+      "x_inches": 9.2,
+      "y_inches": 2.3,
+      "width_inches": 2.0,
+      "height_inches": 1.2,
+      "text": "执行"
+    },
+    {
+      "op": "set_notes",
+      "slide_index": 1,
+      "text": "该页为引擎新生成页面。"
     }
   ]
 }

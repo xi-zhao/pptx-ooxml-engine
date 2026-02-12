@@ -29,6 +29,21 @@ def _load_example_ops(example_path: Path) -> dict:
     return json.loads(example_path.read_text(encoding="utf-8"))
 
 
+def _copy_ops_available() -> bool:
+    try:
+        from .engine import _import_copy_ops
+
+        _import_copy_ops()
+        return True
+    except ModuleNotFoundError:
+        return False
+
+
+def _uses_copy_op(ops_doc: dict) -> bool:
+    operations = ops_doc.get("operations", [])
+    return any(isinstance(item, dict) and item.get("op") == "copy_slide" for item in operations)
+
+
 def generate_example_outputs(output_dir: str | Path) -> list[Path]:
     out_dir = Path(output_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -47,9 +62,12 @@ def generate_example_outputs(output_dir: str | Path) -> list[Path]:
         ops_dir / "02_template_plus_reuse_library.json",
     ]
 
+    copy_available = _copy_ops_available()
     generated: list[Path] = []
     for idx, ops_file in enumerate(ops_files, start=1):
         ops_doc = _load_example_ops(ops_file)
+        if _uses_copy_op(ops_doc) and not copy_available:
+            continue
         ops_doc["template_pptx"] = str(template_pptx)
         libs = list(ops_doc.get("reuse_slide_libraries", []))
         if libs:
@@ -62,6 +80,8 @@ def generate_example_outputs(output_dir: str | Path) -> list[Path]:
             verify=True,
         )
         generated.append(result.output_path)
+    if not generated:
+        raise RuntimeError("No examples generated. Install pptx-copy-ops or provide non-copy examples.")
     return generated
 
 
