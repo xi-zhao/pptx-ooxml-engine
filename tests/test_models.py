@@ -172,6 +172,34 @@ def test_parse_copy_and_create_ops() -> None:
                     "slide_index": 0,
                     "shape_name": "logo",
                     "image_path": "/tmp/b.png"
+                },
+                {
+                    "op": "update_chart_data",
+                    "slide_index": 0,
+                    "chart_name": "chart1",
+                    "categories": ["Q1", "Q2"],
+                    "series": [
+                        {"name": "s1", "values": [1, 2]}
+                    ]
+                },
+                {
+                    "op": "set_table_style",
+                    "slide_index": 0,
+                    "table_name": "tbl",
+                    "header_bold": True
+                },
+                {
+                    "op": "set_table_row_col_size",
+                    "slide_index": 0,
+                    "table_name": "tbl",
+                    "row_index": 0,
+                    "row_height_inches": 0.6
+                },
+                {
+                    "op": "set_text_hyperlink",
+                    "slide_index": 0,
+                    "shape_name": "tb",
+                    "url": "https://example.com"
                 }
             ],
         }
@@ -180,7 +208,7 @@ def test_parse_copy_and_create_ops() -> None:
     ops = parse_ops(plan.model_dump())
     assert plan.template_pptx == "/tmp/template_master.pptx"
     assert plan.reuse_slide_libraries == ["/tmp/reuse_library_a.pptx"]
-    assert len(ops) == 23
+    assert len(ops) == 27
     assert ops[0].op == "copy_slide"
     assert ops[0].reuse_library_index == 0
     assert ops[1].op == "delete_slide"
@@ -205,6 +233,10 @@ def test_parse_copy_and_create_ops() -> None:
     assert ops[20].op == "merge_table_cells"
     assert ops[21].op == "set_shape_hyperlink"
     assert ops[22].op == "replace_image"
+    assert ops[23].op == "update_chart_data"
+    assert ops[24].op == "set_table_style"
+    assert ops[25].op == "set_table_row_col_size"
+    assert ops[26].op == "set_text_hyperlink"
 
 
 def test_set_shape_text_requires_shape_target() -> None:
@@ -260,6 +292,27 @@ def test_replace_image_requires_target() -> None:
                         "op": "replace_image",
                         "slide_index": 0,
                         "image_path": "/tmp/a.png",
+                    }
+                ]
+            }
+        )
+
+
+def test_update_chart_data_series_values_must_match_categories() -> None:
+    from pptx_ooxml_engine.models import parse_plan
+
+    with pytest.raises(ValueError):
+        parse_plan(
+            {
+                "operations": [
+                    {
+                        "op": "update_chart_data",
+                        "slide_index": 0,
+                        "chart_name": "c1",
+                        "categories": ["Q1", "Q2", "Q3"],
+                        "series": [
+                            {"name": "s1", "values": [1, 2]}
+                        ],
                     }
                 ]
             }

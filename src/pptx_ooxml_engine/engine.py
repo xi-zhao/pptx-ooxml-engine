@@ -39,12 +39,16 @@ from .models import (
     SetNotesOp,
     SetShapeGeometryOp,
     SetShapeHyperlinkOp,
+    SetTableRowColSizeOp,
+    SetTableStyleOp,
+    SetTextHyperlinkOp,
     SetShapeTextOp,
     SetShapeZOrderOp,
     SetSlideBackgroundOp,
     SetSlideLayoutOp,
     SetSlideSizeOp,
     SetTableCellOp,
+    UpdateChartDataOp,
     parse_plan,
     parse_ops,
 )
@@ -178,6 +182,20 @@ def _table_cell_or_raise(table, row: int, col: int, op_name: str):
             f"total_rows={len(table.rows)}, total_cols={len(table.columns)}"
         )
     return table.cell(row, col)
+
+
+def _chart_for_target(slide: Slide, chart_name: str | None, chart_index: int | None):
+    chart_shapes = [shape for shape in slide.shapes if getattr(shape, "has_chart", False)]
+    if chart_name is not None:
+        for shape in chart_shapes:
+            if shape.name == chart_name:
+                return shape.chart
+        raise ValueError(f"chart not found by name: {chart_name}")
+    if chart_index is not None:
+        if chart_index >= len(chart_shapes):
+            raise IndexError(f"chart_index out of range: {chart_index}, total={len(chart_shapes)}")
+        return chart_shapes[chart_index].chart
+    raise ValueError("chart target is required")
 
 
 def _placeholder_for_target(
@@ -612,6 +630,16 @@ def _apply_add_chart(op: AddChartOp, presentation: Presentation) -> None:
         chart_shape.name = op.name
 
 
+def _apply_update_chart_data(op: UpdateChartDataOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "update_chart_data")
+    chart = _chart_for_target(slide, op.chart_name, op.chart_index)
+    chart_data = CategoryChartData()
+    chart_data.categories = op.categories
+    for series in op.series:
+        chart_data.add_series(series.name, tuple(series.values))
+    chart.replace_data(chart_data)
+
+
 def _apply_set_table_cell(op: SetTableCellOp, presentation: Presentation) -> None:
     slide = _slide_or_raise(presentation, op.slide_index, "set_table_cell")
     table = _table_for_target(slide, op.table_name, op.table_index)
@@ -642,10 +670,79 @@ def _apply_merge_table_cells(op: MergeTableCellsOp, presentation: Presentation) 
     start_cell.merge(end_cell)
 
 
+def _apply_set_table_style(op: SetTableStyleOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_table_style")
+    table = _table_for_target(slide, op.table_name, op.table_index)
+
+    for row_idx, row in enumerate(table.rows):
+        for col_idx, _ in enumerate(table.columns):
+            cell = table.cell(row_idx, col_idx)
+            paragraph = cell.text_frame.paragraphs[0]
+            if op.alignment is not None:
+                paragraph.alignment = _ALIGN_MAP[op.alignment]
+            if op.font_size_pt is not None:
+                paragraph.font.size = Pt(op.font_size_pt)
+            if op.text_color_hex is not None:
+                paragraph.font.color.rgb = _hex_to_rgb(op.text_color_hex)
+            if row_idx == 0:
+                if op.header_bold is not None:
+                    paragraph.font.bold = op.header_bold
+                if op.header_fill_color_hex is not None:
+                    cell.fill.solid()
+                    cell.fill.fore_color.rgb = _hex_to_rgb(op.header_fill_color_hex)
+            else:
+                if op.body_fill_color_hex is not None:
+                    cell.fill.solid()
+                    cell.fill.fore_color.rgb = _hex_to_rgb(op.body_fill_color_hex)
+
+
+def _apply_set_table_row_col_size(op: SetTableRowColSizeOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_table_row_col_size")
+    table = _table_for_target(slide, op.table_name, op.table_index)
+    if op.row_index is not None and op.row_height_inches is not None:
+        if op.row_index >= len(table.rows):
+            raise IndexError(
+                f"set_table_row_col_size row_index out of range: {op.row_index}, total={len(table.rows)}"
+            )
+        table.rows[op.row_index].height = Inches(op.row_height_inches)
+    if op.col_index is not None and op.col_width_inches is not None:
+        if op.col_index >= len(table.columns):
+            raise IndexError(
+                f"set_table_row_col_size col_index out of range: {op.col_index}, total={len(table.columns)}"
+            )
+        table.columns[op.col_index].width = Inches(op.col_width_inches)
+
+
 def _apply_set_shape_hyperlink(op: SetShapeHyperlinkOp, presentation: Presentation) -> None:
     slide = _slide_or_raise(presentation, op.slide_index, "set_shape_hyperlink")
     shape = _shape_for_target(slide, op.shape_name, op.shape_index)
     shape.click_action.hyperlink.address = op.url
+
+
+def _apply_set_text_hyperlink(op: SetTextHyperlinkOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_text_hyperlink")
+    shape = _shape_for_target(slide, op.shape_name, op.shape_index)
+    if not getattr(shape, "has_text_frame", False):
+        raise ValueError(f"target shape has no text frame: {shape.name}")
+
+    linked = 0
+    for paragraph in shape.text_frame.paragraphs:
+        runs = list(paragraph.runs)
+        if not runs and paragraph.text:
+            cached = paragraph.text
+            paragraph.clear()
+            run = paragraph.add_run()
+            run.text = cached
+            runs = [run]
+        for run in runs:
+            if op.match_text and op.match_text not in run.text:
+                continue
+            run.hyperlink.address = op.url
+            linked += 1
+            if op.occurrence == "first":
+                return
+    if linked == 0:
+        raise ValueError("set_text_hyperlink cannot find target text run")
 
 
 def _apply_replace_image(op: ReplaceImageOp, presentation: Presentation) -> None:
@@ -866,14 +963,26 @@ def apply_ops(
         if isinstance(op, AddChartOp):
             _apply_add_chart(op, presentation)
             continue
+        if isinstance(op, UpdateChartDataOp):
+            _apply_update_chart_data(op, presentation)
+            continue
         if isinstance(op, SetTableCellOp):
             _apply_set_table_cell(op, presentation)
             continue
         if isinstance(op, MergeTableCellsOp):
             _apply_merge_table_cells(op, presentation)
             continue
+        if isinstance(op, SetTableStyleOp):
+            _apply_set_table_style(op, presentation)
+            continue
+        if isinstance(op, SetTableRowColSizeOp):
+            _apply_set_table_row_col_size(op, presentation)
+            continue
         if isinstance(op, SetShapeHyperlinkOp):
             _apply_set_shape_hyperlink(op, presentation)
+            continue
+        if isinstance(op, SetTextHyperlinkOp):
+            _apply_set_text_hyperlink(op, presentation)
             continue
         if isinstance(op, ReplaceImageOp):
             _apply_replace_image(op, presentation)

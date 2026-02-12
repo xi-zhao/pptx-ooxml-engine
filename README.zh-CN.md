@@ -19,7 +19,7 @@
 - 只负责按计划执行
 - `template_pptx` 指母版模板（master/layout），不是复用页
 
-## 功能（v1.2.0）
+## 功能（v1.3.0）
 
 结构管理：
 - `copy_slide`（`part` / `shape`）
@@ -43,7 +43,11 @@
 - `replace_image`
 - `set_table_cell`
 - `merge_table_cells`
+- `set_table_style`
+- `set_table_row_col_size`
 - `set_shape_hyperlink`
+- `set_text_hyperlink`
+- `update_chart_data`
 
 排版：
 - `align_shapes`

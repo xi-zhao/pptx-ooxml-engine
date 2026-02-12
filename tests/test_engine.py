@@ -605,3 +605,120 @@ def test_apply_ops_v1_2_media_table_and_link_ops(tmp_path: Path) -> None:
 
     logo_shape = next(shape for shape in slide.shapes if shape.name == "logo_box")
     assert logo_shape.image.blob == image_b.read_bytes()
+
+
+def test_apply_ops_v1_3_chart_table_and_text_link_ops(tmp_path: Path) -> None:
+    from pptx_ooxml_engine.engine import apply_ops
+
+    template = tmp_path / "template_v1_3_ops.pptx"
+    output = tmp_path / "output_v1_3_ops.pptx"
+    _build_target_pptx(template)
+
+    result = apply_ops(
+        input_pptx=None,
+        ops={
+            "template_pptx": str(template),
+            "operations": [
+                {
+                    "op": "add_chart",
+                    "slide_index": 0,
+                    "chart_type": "line",
+                    "x_inches": 0.8,
+                    "y_inches": 1.6,
+                    "width_inches": 4.5,
+                    "height_inches": 2.4,
+                    "categories": ["Q1", "Q2", "Q3"],
+                    "series": [
+                        {"name": "Revenue", "values": [10, 20, 30]},
+                    ],
+                    "name": "trend_chart",
+                },
+                {
+                    "op": "update_chart_data",
+                    "slide_index": 0,
+                    "chart_name": "trend_chart",
+                    "categories": ["Q1", "Q2", "Q3", "Q4"],
+                    "series": [
+                        {"name": "Revenue", "values": [12, 22, 32, 42]},
+                        {"name": "Profit", "values": [3, 5, 7, 9]},
+                    ],
+                },
+                {
+                    "op": "add_table",
+                    "slide_index": 0,
+                    "x_inches": 5.6,
+                    "y_inches": 1.6,
+                    "width_inches": 5.8,
+                    "height_inches": 2.6,
+                    "name": "tbl_style",
+                    "data": [["Metric", "Value"], ["Revenue", "1148"], ["Margin", "25%"]],
+                },
+                {
+                    "op": "set_table_style",
+                    "slide_index": 0,
+                    "table_name": "tbl_style",
+                    "font_size_pt": 16,
+                    "alignment": "center",
+                    "header_bold": True,
+                    "header_fill_color_hex": "FFD966",
+                    "body_fill_color_hex": "DDEEFF",
+                },
+                {
+                    "op": "set_table_row_col_size",
+                    "slide_index": 0,
+                    "table_name": "tbl_style",
+                    "row_index": 0,
+                    "row_height_inches": 0.7,
+                    "col_index": 1,
+                    "col_width_inches": 2.5,
+                },
+                {
+                    "op": "add_textbox",
+                    "slide_index": 0,
+                    "x_inches": 0.8,
+                    "y_inches": 4.4,
+                    "width_inches": 4.8,
+                    "height_inches": 1.0,
+                    "name": "tb_link",
+                    "text": "Visit Docs Center",
+                },
+                {
+                    "op": "set_text_hyperlink",
+                    "slide_index": 0,
+                    "shape_name": "tb_link",
+                    "url": "https://example.com/docs",
+                    "match_text": "Docs",
+                    "occurrence": "first",
+                },
+            ],
+        },
+        output_pptx=output,
+        verify=True,
+    )
+
+    assert result.output_path == output.resolve()
+    prs = Presentation(str(output))
+    slide = prs.slides[0]
+
+    chart_shape = next(shape for shape in slide.shapes if shape.name == "trend_chart")
+    assert chart_shape.has_chart
+    assert len(chart_shape.chart.series) == 2
+    assert chart_shape.chart.series[0].name == "Revenue"
+    assert chart_shape.chart.series[1].values[3] == 9
+
+    tbl_shape = next(shape for shape in slide.shapes if shape.name == "tbl_style")
+    table = tbl_shape.table
+    assert table.cell(0, 0).text_frame.paragraphs[0].font.bold is True
+    assert table.cell(0, 0).fill.fore_color.rgb == RGBColor.from_string("FFD966")
+    assert table.cell(1, 0).fill.fore_color.rgb == RGBColor.from_string("DDEEFF")
+    assert table.rows[0].height == Inches(0.7)
+    assert table.columns[1].width == Inches(2.5)
+
+    tb = next(shape for shape in slide.shapes if shape.name == "tb_link")
+    linked = [
+        run.hyperlink.address
+        for paragraph in tb.text_frame.paragraphs
+        for run in paragraph.runs
+        if run.hyperlink.address
+    ]
+    assert "https://example.com/docs" in linked

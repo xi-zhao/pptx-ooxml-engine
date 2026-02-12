@@ -1,4 +1,4 @@
-# pptx-ooxml-engine Specification (v1.2.0)
+# pptx-ooxml-engine Specification (v1.3.0)
 
 ## 1. Purpose / 目标
 
@@ -67,10 +67,14 @@
 - `set_slide_background`
 - `fill_placeholder`
 - `add_chart`
+- `update_chart_data`
 - `replace_image`
 - `set_table_cell`
 - `merge_table_cells`
+- `set_table_style`
+- `set_table_row_col_size`
 - `set_shape_hyperlink`
+- `set_text_hyperlink`
 
 ### 5.3 Layout Ops / 排版操作
 
@@ -215,6 +219,15 @@
 - `series: ChartSeriesSpec[]`（非空，且每个 series 的 values 长度必须与 categories 一致）
 - `name?: str`
 
+### `update_chart_data`
+- `op: "update_chart_data"`
+- `slide_index: int >= 0`
+- Required one of:
+- `chart_name: str`
+- `chart_index: int >= 0`
+- `categories: string[]`（非空）
+- `series: ChartSeriesSpec[]`（非空，且每个 series 的 values 长度必须与 categories 一致）
+
 ### `replace_image`
 - `op: "replace_image"`
 - `slide_index: int >= 0`
@@ -250,6 +263,30 @@
 - `start_row, start_col, end_row, end_col: int >= 0`
 - `end_row >= start_row` 且 `end_col >= start_col`
 
+### `set_table_style`
+- `op: "set_table_style"`
+- `slide_index: int >= 0`
+- Required one of:
+- `table_name: str`
+- `table_index: int >= 0`
+- Required at least one style field:
+- `font_size_pt?: float > 0`
+- `text_color_hex?: RRGGBB | #RRGGBB`
+- `alignment?: "left" | "center" | "right" | "justify"`
+- `header_bold?: bool`
+- `header_fill_color_hex?: RRGGBB | #RRGGBB`
+- `body_fill_color_hex?: RRGGBB | #RRGGBB`
+
+### `set_table_row_col_size`
+- `op: "set_table_row_col_size"`
+- `slide_index: int >= 0`
+- Required one of:
+- `table_name: str`
+- `table_index: int >= 0`
+- Required one or both:
+- `row_index: int >= 0` + `row_height_inches: float > 0`
+- `col_index: int >= 0` + `col_width_inches: float > 0`
+
 ### `set_shape_hyperlink`
 - `op: "set_shape_hyperlink"`
 - `slide_index: int >= 0`
@@ -257,6 +294,16 @@
 - `shape_name: str`
 - `shape_index: int >= 0`
 - `url: str`
+
+### `set_text_hyperlink`
+- `op: "set_text_hyperlink"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- `url: str`
+- `match_text?: str`（仅命中的 run 会写入链接）
+- `occurrence?: "first" | "all"`（默认 `all`）
 
 ### `align_shapes`
 - `op: "align_shapes"`

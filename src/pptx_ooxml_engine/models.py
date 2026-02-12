@@ -317,6 +317,77 @@ class AddChartOp(BaseModel):
         return self
 
 
+class UpdateChartDataOp(BaseModel):
+    op: Literal["update_chart_data"]
+    slide_index: int = Field(ge=0)
+    chart_name: str | None = None
+    chart_index: int | None = Field(default=None, ge=0)
+    categories: list[str] = Field(min_length=1)
+    series: list[ChartSeriesSpec] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_target_and_series_length(self) -> "UpdateChartDataOp":
+        if self.chart_name is None and self.chart_index is None:
+            raise ValueError("update_chart_data requires chart_name or chart_index")
+        category_len = len(self.categories)
+        for item in self.series:
+            if len(item.values) != category_len:
+                raise ValueError("update_chart_data series values length must match categories length")
+        return self
+
+
+class SetTableStyleOp(BaseModel):
+    op: Literal["set_table_style"]
+    slide_index: int = Field(ge=0)
+    table_name: str | None = None
+    table_index: int | None = Field(default=None, ge=0)
+    font_size_pt: float | None = Field(default=None, gt=0)
+    text_color_hex: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    alignment: Literal["left", "center", "right", "justify"] | None = None
+    header_bold: bool | None = None
+    header_fill_color_hex: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    body_fill_color_hex: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+
+    @model_validator(mode="after")
+    def _check_target_and_payload(self) -> "SetTableStyleOp":
+        if self.table_name is None and self.table_index is None:
+            raise ValueError("set_table_style requires table_name or table_index")
+        if (
+            self.font_size_pt is None
+            and self.text_color_hex is None
+            and self.alignment is None
+            and self.header_bold is None
+            and self.header_fill_color_hex is None
+            and self.body_fill_color_hex is None
+        ):
+            raise ValueError("set_table_style requires at least one style field")
+        return self
+
+
+class SetTableRowColSizeOp(BaseModel):
+    op: Literal["set_table_row_col_size"]
+    slide_index: int = Field(ge=0)
+    table_name: str | None = None
+    table_index: int | None = Field(default=None, ge=0)
+    row_index: int | None = Field(default=None, ge=0)
+    row_height_inches: float | None = Field(default=None, gt=0)
+    col_index: int | None = Field(default=None, ge=0)
+    col_width_inches: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_target_and_payload(self) -> "SetTableRowColSizeOp":
+        if self.table_name is None and self.table_index is None:
+            raise ValueError("set_table_row_col_size requires table_name or table_index")
+        has_row = self.row_index is not None and self.row_height_inches is not None
+        has_col = self.col_index is not None and self.col_width_inches is not None
+        if not has_row and not has_col:
+            raise ValueError(
+                "set_table_row_col_size requires (row_index + row_height_inches) and/or "
+                "(col_index + col_width_inches)"
+            )
+        return self
+
+
 class SetShapeHyperlinkOp(BaseModel):
     op: Literal["set_shape_hyperlink"]
     slide_index: int = Field(ge=0)
@@ -328,6 +399,22 @@ class SetShapeHyperlinkOp(BaseModel):
     def _check_target(self) -> "SetShapeHyperlinkOp":
         if self.shape_name is None and self.shape_index is None:
             raise ValueError("set_shape_hyperlink requires shape_name or shape_index")
+        return self
+
+
+class SetTextHyperlinkOp(BaseModel):
+    op: Literal["set_text_hyperlink"]
+    slide_index: int = Field(ge=0)
+    shape_name: str | None = None
+    shape_index: int | None = Field(default=None, ge=0)
+    url: str = Field(min_length=1)
+    match_text: str | None = None
+    occurrence: Literal["first", "all"] = "all"
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "SetTextHyperlinkOp":
+        if self.shape_name is None and self.shape_index is None:
+            raise ValueError("set_text_hyperlink requires shape_name or shape_index")
         return self
 
 
@@ -383,8 +470,12 @@ Operation = Annotated[
         SetShapeGeometryOp,
         SetShapeZOrderOp,
         AddChartOp,
+        UpdateChartDataOp,
         SetShapeHyperlinkOp,
+        SetTextHyperlinkOp,
         ReplaceImageOp,
+        SetTableStyleOp,
+        SetTableRowColSizeOp,
         AlignShapesOp,
         DistributeShapesOp,
     ],
