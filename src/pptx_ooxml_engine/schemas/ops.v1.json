@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xi-zhao/pptx-ooxml-engine/schemas/ops.v1.json",
+  "title": "pptx-ooxml-engine operations v1",
+  "type": "object",
+  "required": ["operations"],
+  "properties": {
+    "template_pptx": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Master/layout template PPTX path."
+    },
+    "reuse_slide_libraries": {
+      "type": "array",
+      "description": "Optional reusable slide library PPTX paths.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["op", "source_slide_index"],
+            "properties": {
+              "op": { "const": "copy_slide" },
+              "source_path": { "type": "string", "minLength": 1 },
+              "reuse_library_index": { "type": "integer", "minimum": 0 },
+              "source_slide_index": { "type": "integer", "minimum": 0 },
+              "mode": { "type": "string", "enum": ["shape", "part"] }
+            },
+            "anyOf": [
+              { "required": ["source_path"] },
+              { "required": ["reuse_library_index"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op"],
+            "properties": {
+              "op": { "const": "create_slide_on_layout" },
+              "layout_index": { "type": "integer", "minimum": 0 },
+              "title": { "type": "string" },
+              "body": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "find", "replace"],
+            "properties": {
+              "op": { "const": "rewrite_text" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "find": { "type": "string" },
+              "replace": { "type": "string" },
+              "shape_name": { "type": "string" },
+              "occurrence": { "type": "string", "enum": ["first", "all"] }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

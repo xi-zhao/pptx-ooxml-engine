@@ -1,0 +1,20 @@
+{
+  "template_pptx": "resources/theme1.pptx",
+  "reuse_slide_libraries": [
+    "resources/reuse_libraries/theme1_theme2_fullcopy_library_v2.pptx"
+  ],
+  "operations": [
+    {
+      "op": "copy_slide",
+      "reuse_library_index": 0,
+      "source_slide_index": 0,
+      "mode": "shape"
+    },
+    {
+      "op": "create_slide_on_layout",
+      "layout_index": 0,
+      "title": "新增分析页",
+      "body": "这里由上层规划器生成内容，然后由引擎执行排版。"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "template_pptx": "resources/theme1.pptx",
+  "operations": [
+    {
+      "op": "create_slide_on_layout",
+      "layout_index": 0,
+      "title": "执行摘要",
+      "body": "请在此填入本页摘要内容。"
+    },
+    {
+      "op": "create_slide_on_layout",
+      "layout_index": 0,
+      "title": "关键结论",
+      "body": "请在此填入关键结论。"
+    }
+  ]
+}
