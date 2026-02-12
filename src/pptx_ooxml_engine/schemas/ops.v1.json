@@ -22,6 +22,19 @@
         "space_after_pt": { "type": "number", "minimum": 0 }
       },
       "additionalProperties": false
+    },
+    "chart_series": {
+      "type": "object",
+      "required": ["name", "values"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "number" }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "properties": {
@@ -259,6 +272,110 @@
               "op": { "const": "set_slide_background" },
               "slide_index": { "type": "integer", "minimum": 0 },
               "color_hex": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index"],
+            "properties": {
+              "op": { "const": "fill_placeholder" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "placeholder_idx": { "type": "integer", "minimum": 0 },
+              "placeholder_type": { "type": "string", "enum": ["title", "body", "subtitle", "picture", "object"] },
+              "text": { "type": "string" },
+              "paragraphs": {
+                "type": "array",
+                "items": { "$ref": "#/$defs/paragraph" }
+              },
+              "image_path": { "type": "string", "minLength": 1 }
+            },
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["placeholder_idx"] },
+                  { "required": ["placeholder_type"] }
+                ]
+              },
+              {
+                "anyOf": [
+                  { "required": ["text"] },
+                  { "required": ["paragraphs"] },
+                  { "required": ["image_path"] }
+                ]
+              }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index"],
+            "properties": {
+              "op": { "const": "set_shape_geometry" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "shape_name": { "type": "string" },
+              "shape_index": { "type": "integer", "minimum": 0 },
+              "x_inches": { "type": "number", "minimum": 0 },
+              "y_inches": { "type": "number", "minimum": 0 },
+              "width_inches": { "type": "number", "exclusiveMinimum": 0 },
+              "height_inches": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["shape_name"] },
+                  { "required": ["shape_index"] }
+                ]
+              },
+              {
+                "anyOf": [
+                  { "required": ["x_inches"] },
+                  { "required": ["y_inches"] },
+                  { "required": ["width_inches"] },
+                  { "required": ["height_inches"] }
+                ]
+              }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "action"],
+            "properties": {
+              "op": { "const": "set_shape_z_order" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "shape_name": { "type": "string" },
+              "shape_index": { "type": "integer", "minimum": 0 },
+              "action": { "type": "string", "enum": ["bring_to_front", "send_to_back", "bring_forward", "send_backward"] }
+            },
+            "anyOf": [
+              { "required": ["shape_name"] },
+              { "required": ["shape_index"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "chart_type", "x_inches", "y_inches", "width_inches", "height_inches", "categories", "series"],
+            "properties": {
+              "op": { "const": "add_chart" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "chart_type": { "type": "string", "enum": ["column_clustered", "line", "pie"] },
+              "x_inches": { "type": "number", "minimum": 0 },
+              "y_inches": { "type": "number", "minimum": 0 },
+              "width_inches": { "type": "number", "exclusiveMinimum": 0 },
+              "height_inches": { "type": "number", "exclusiveMinimum": 0 },
+              "categories": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string" }
+              },
+              "series": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/chart_series" }
+              },
+              "name": { "type": "string" }
             },
             "additionalProperties": false
           },

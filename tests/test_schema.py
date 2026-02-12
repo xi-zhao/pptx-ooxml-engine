@@ -29,6 +29,10 @@ def test_load_ops_schema() -> None:
         "add_shape",
         "add_table",
         "set_slide_background",
+        "fill_placeholder",
+        "set_shape_geometry",
+        "set_shape_z_order",
+        "add_chart",
         "align_shapes",
         "distribute_shapes",
     }

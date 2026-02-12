@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Iterable
 
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE, PP_PLACEHOLDER
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.oxml.xmlchemy import OxmlElement
@@ -19,19 +21,23 @@ from .models import (
     AddShapeOp,
     AddTableOp,
     AddTextBoxOp,
+    AddChartOp,
     AlignShapesOp,
     CopyMode,
     CopySlideOp,
     CreateSlideOnLayoutOp,
     DeleteSlideOp,
     DistributeShapesOp,
+    FillPlaceholderOp,
     MoveSlideOp,
     Operation,
     OperationPlan,
     ParagraphSpec,
     RewriteTextOp,
     SetNotesOp,
+    SetShapeGeometryOp,
     SetShapeTextOp,
+    SetShapeZOrderOp,
     SetSlideBackgroundOp,
     SetSlideLayoutOp,
     SetSlideSizeOp,
@@ -58,6 +64,25 @@ _SHAPE_MAP = {
     "round_rect": MSO_SHAPE.ROUNDED_RECTANGLE,
     "ellipse": MSO_SHAPE.OVAL,
     "right_arrow": MSO_SHAPE.RIGHT_ARROW,
+}
+_PLACEHOLDER_MAP = {
+    "title": {PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE},
+    "body": {PP_PLACEHOLDER.BODY},
+    "subtitle": {PP_PLACEHOLDER.SUBTITLE},
+    "picture": {PP_PLACEHOLDER.PICTURE},
+    "object": {PP_PLACEHOLDER.OBJECT},
+}
+_CHART_MAP = {
+    "column_clustered": XL_CHART_TYPE.COLUMN_CLUSTERED,
+    "line": XL_CHART_TYPE.LINE,
+    "pie": XL_CHART_TYPE.PIE,
+}
+_SHAPE_TREE_DRAW_TAGS = {
+    qn("p:sp"),
+    qn("p:pic"),
+    qn("p:graphicFrame"),
+    qn("p:cxnSp"),
+    qn("p:grpSp"),
 }
 
 
@@ -118,6 +143,50 @@ def _shape_by_index(slide: Slide, shape_index: int):
     if shape_index >= len(slide.shapes):
         raise IndexError(f"shape_index out of range: {shape_index}, total={len(slide.shapes)}")
     return slide.shapes[shape_index]
+
+
+def _shape_for_target(slide: Slide, shape_name: str | None, shape_index: int | None):
+    if shape_name is not None:
+        return _shape_by_name(slide, shape_name)
+    if shape_index is not None:
+        return _shape_by_index(slide, shape_index)
+    raise ValueError("shape target is required")
+
+
+def _placeholder_for_target(
+    slide: Slide,
+    placeholder_idx: int | None,
+    placeholder_type: str | None,
+):
+    if placeholder_idx is not None:
+        for shape in slide.shapes:
+            if not getattr(shape, "is_placeholder", False):
+                continue
+            if shape.placeholder_format.idx == placeholder_idx:
+                return shape
+        raise ValueError(f"placeholder idx not found: {placeholder_idx}")
+
+    if placeholder_type is None:
+        raise ValueError("placeholder target is required")
+    target_types = _PLACEHOLDER_MAP[placeholder_type]
+    for shape in slide.shapes:
+        if not getattr(shape, "is_placeholder", False):
+            continue
+        try:
+            if shape.placeholder_format.type in target_types:
+                return shape
+        except Exception:
+            continue
+    raise ValueError(f"placeholder type not found: {placeholder_type}")
+
+
+def _draw_node_indices(sp_tree) -> list[int]:
+    return [idx for idx, child in enumerate(list(sp_tree)) if child.tag in _SHAPE_TREE_DRAW_TAGS]
+
+
+def _move_shape_tree_node(sp_tree, element, target_idx: int) -> None:
+    sp_tree.remove(element)
+    sp_tree.insert(target_idx, element)
 
 
 def _set_paragraph_list_style(paragraph, list_type: str) -> None:
@@ -426,6 +495,91 @@ def _apply_set_slide_background(op: SetSlideBackgroundOp, presentation: Presenta
     fill.fore_color.rgb = _hex_to_rgb(op.color_hex)
 
 
+def _apply_fill_placeholder(op: FillPlaceholderOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "fill_placeholder")
+    placeholder = _placeholder_for_target(slide, op.placeholder_idx, op.placeholder_type)
+    if op.image_path is not None:
+        image_path = Path(op.image_path).expanduser().resolve()
+        if not image_path.exists():
+            raise FileNotFoundError(f"image_path not found: {image_path}")
+        if not hasattr(placeholder, "insert_picture"):
+            raise ValueError(f"placeholder does not support image insertion: {placeholder.name}")
+        placeholder.insert_picture(str(image_path))
+        return
+
+    if not getattr(placeholder, "has_text_frame", False):
+        raise ValueError(f"placeholder has no text frame: {placeholder.name}")
+    _write_text_frame(placeholder.text_frame, op.text, op.paragraphs, None, None)
+
+
+def _apply_set_shape_geometry(op: SetShapeGeometryOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_shape_geometry")
+    shape = _shape_for_target(slide, op.shape_name, op.shape_index)
+    if op.x_inches is not None:
+        shape.left = Inches(op.x_inches)
+    if op.y_inches is not None:
+        shape.top = Inches(op.y_inches)
+    if op.width_inches is not None:
+        shape.width = Inches(op.width_inches)
+    if op.height_inches is not None:
+        shape.height = Inches(op.height_inches)
+
+
+def _apply_set_shape_z_order(op: SetShapeZOrderOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_shape_z_order")
+    shape = _shape_for_target(slide, op.shape_name, op.shape_index)
+    sp_tree = slide.shapes._spTree
+    children = list(sp_tree)
+    element = shape.element
+    if element not in children:
+        raise ValueError(f"shape element not found in shape tree: {shape.name}")
+    current_idx = children.index(element)
+    draw_indices = _draw_node_indices(sp_tree)
+    if not draw_indices:
+        return
+
+    if op.action == "bring_to_front":
+        sp_tree.remove(element)
+        sp_tree.append(element)
+        return
+    if op.action == "send_to_back":
+        _move_shape_tree_node(sp_tree, element, draw_indices[0])
+        return
+
+    # relative move among drawable siblings only
+    if op.action == "bring_forward":
+        next_targets = [idx for idx in draw_indices if idx > current_idx]
+        if not next_targets:
+            return
+        target = next_targets[0]
+        if current_idx < target:
+            target -= 1
+        _move_shape_tree_node(sp_tree, element, target + 1)
+        return
+    prev_targets = [idx for idx in draw_indices if idx < current_idx]
+    if not prev_targets:
+        return
+    _move_shape_tree_node(sp_tree, element, prev_targets[-1])
+
+
+def _apply_add_chart(op: AddChartOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "add_chart")
+    chart_data = CategoryChartData()
+    chart_data.categories = op.categories
+    for series in op.series:
+        chart_data.add_series(series.name, tuple(series.values))
+    chart_shape = slide.shapes.add_chart(
+        _CHART_MAP[op.chart_type],
+        Inches(op.x_inches),
+        Inches(op.y_inches),
+        Inches(op.width_inches),
+        Inches(op.height_inches),
+        chart_data,
+    )
+    if op.name:
+        chart_shape.name = op.name
+
+
 def _apply_align_shapes(op: AlignShapesOp, presentation: Presentation) -> None:
     slide = _slide_or_raise(presentation, op.slide_index, "align_shapes")
     shapes = [_shape_by_name(slide, name) for name in op.shape_names]
@@ -608,6 +762,18 @@ def apply_ops(
             continue
         if isinstance(op, SetSlideBackgroundOp):
             _apply_set_slide_background(op, presentation)
+            continue
+        if isinstance(op, FillPlaceholderOp):
+            _apply_fill_placeholder(op, presentation)
+            continue
+        if isinstance(op, SetShapeGeometryOp):
+            _apply_set_shape_geometry(op, presentation)
+            continue
+        if isinstance(op, SetShapeZOrderOp):
+            _apply_set_shape_z_order(op, presentation)
+            continue
+        if isinstance(op, AddChartOp):
+            _apply_add_chart(op, presentation)
             continue
         if isinstance(op, AlignShapesOp):
             _apply_align_shapes(op, presentation)

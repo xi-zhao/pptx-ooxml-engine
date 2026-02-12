@@ -1,4 +1,4 @@
-# pptx-ooxml-engine Specification (v1.0.0)
+# pptx-ooxml-engine Specification (v1.1.0)
 
 ## 1. Purpose / 目标
 
@@ -65,11 +65,15 @@
 - `add_shape`
 - `add_table`
 - `set_slide_background`
+- `fill_placeholder`
+- `add_chart`
 
 ### 5.3 Layout Ops / 排版操作
 
 - `align_shapes`
 - `distribute_shapes`
+- `set_shape_geometry`
+- `set_shape_z_order`
 
 ## 6. Operation Signatures / 参数签名
 
@@ -186,6 +190,27 @@
 - `slide_index: int >= 0`
 - `color_hex: RRGGBB | #RRGGBB`
 
+### `fill_placeholder`
+- `op: "fill_placeholder"`
+- `slide_index: int >= 0`
+- Required one of:
+- `placeholder_idx: int >= 0`
+- `placeholder_type: "title" | "body" | "subtitle" | "picture" | "object"`
+- Required one of:
+- `text: str`
+- `paragraphs: ParagraphSpec[]`
+- `image_path: str`
+
+### `add_chart`
+- `op: "add_chart"`
+- `slide_index: int >= 0`
+- `chart_type: "column_clustered" | "line" | "pie"`
+- `x_inches, y_inches >= 0`
+- `width_inches, height_inches > 0`
+- `categories: string[]`（非空）
+- `series: ChartSeriesSpec[]`（非空，且每个 series 的 values 长度必须与 categories 一致）
+- `name?: str`
+
 ### `align_shapes`
 - `op: "align_shapes"`
 - `slide_index: int >= 0`
@@ -198,6 +223,26 @@
 - `slide_index: int >= 0`
 - `shape_names: string[]`（至少 3 个）
 - `direction: "horizontal" | "vertical"`
+
+### `set_shape_geometry`
+- `op: "set_shape_geometry"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- Required at least one:
+- `x_inches >= 0`
+- `y_inches >= 0`
+- `width_inches > 0`
+- `height_inches > 0`
+
+### `set_shape_z_order`
+- `op: "set_shape_z_order"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- `action: "bring_to_front" | "send_to_back" | "bring_forward" | "send_backward"`
 
 ### ParagraphSpec
 
@@ -212,6 +257,11 @@
 - `line_spacing?: float > 0`
 - `space_before_pt?: float >= 0`
 - `space_after_pt?: float >= 0`
+
+### ChartSeriesSpec
+
+- `name: str`
+- `values: float[]`（非空）
 
 ## 7. Execution Semantics / 执行语义
 

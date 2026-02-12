@@ -405,3 +405,94 @@ def test_apply_ops_v1_content_and_layout_ops(tmp_path: Path) -> None:
 
     fill = slide.background.fill
     assert fill.fore_color.rgb == RGBColor.from_string("112233")
+
+
+def test_apply_ops_v1_1_placeholder_chart_and_layer_ops(tmp_path: Path) -> None:
+    from pptx_ooxml_engine.engine import apply_ops
+
+    template = tmp_path / "template_v1_1_ops.pptx"
+    output = tmp_path / "output_v1_1_ops.pptx"
+    _build_target_pptx(template)
+
+    result = apply_ops(
+        input_pptx=None,
+        ops={
+            "template_pptx": str(template),
+            "operations": [
+                {"op": "fill_placeholder", "slide_index": 0, "placeholder_type": "title", "text": "Executive Title"},
+                {"op": "fill_placeholder", "slide_index": 0, "placeholder_type": "subtitle", "text": "Subtitle Info"},
+                {
+                    "op": "add_shape",
+                    "slide_index": 0,
+                    "shape_type": "rect",
+                    "x_inches": 0.8,
+                    "y_inches": 2.2,
+                    "width_inches": 2.2,
+                    "height_inches": 1.0,
+                    "name": "layer_a",
+                    "text": "A",
+                },
+                {
+                    "op": "add_shape",
+                    "slide_index": 0,
+                    "shape_type": "rect",
+                    "x_inches": 1.5,
+                    "y_inches": 2.6,
+                    "width_inches": 2.2,
+                    "height_inches": 1.0,
+                    "name": "layer_b",
+                    "text": "B",
+                },
+                {"op": "set_shape_z_order", "slide_index": 0, "shape_name": "layer_a", "action": "bring_to_front"},
+                {
+                    "op": "set_shape_geometry",
+                    "slide_index": 0,
+                    "shape_name": "layer_a",
+                    "x_inches": 5.0,
+                    "y_inches": 1.9,
+                    "width_inches": 2.4,
+                    "height_inches": 1.2,
+                },
+                {
+                    "op": "add_chart",
+                    "slide_index": 0,
+                    "chart_type": "column_clustered",
+                    "x_inches": 7.8,
+                    "y_inches": 1.8,
+                    "width_inches": 4.3,
+                    "height_inches": 2.4,
+                    "categories": ["Q1", "Q2", "Q3"],
+                    "series": [
+                        {"name": "Revenue", "values": [20, 28, 35]},
+                        {"name": "Profit", "values": [6, 8, 10]},
+                    ],
+                    "name": "kpi_chart",
+                },
+            ],
+        },
+        output_pptx=output,
+        verify=True,
+    )
+
+    assert result.output_path == output.resolve()
+    prs = Presentation(str(output))
+    slide = prs.slides[0]
+
+    title_shape = slide.shapes.title
+    assert title_shape is not None
+    assert "Executive Title" in title_shape.text
+    assert any("Subtitle Info" in shape.text for shape in slide.shapes if getattr(shape, "has_text_frame", False))
+
+    layer_a = next(shape for shape in slide.shapes if shape.name == "layer_a")
+    layer_b = next(shape for shape in slide.shapes if shape.name == "layer_b")
+    assert layer_a.left == Inches(5.0)
+    assert layer_a.top == Inches(1.9)
+    assert layer_a.width == Inches(2.4)
+    assert layer_a.height == Inches(1.2)
+
+    names = [shape.name for shape in slide.shapes]
+    assert names.index("layer_a") > names.index("layer_b")
+
+    chart_shape = next(shape for shape in slide.shapes if shape.name == "kpi_chart")
+    assert chart_shape.has_chart
+    assert chart_shape.chart.series[0].name == "Revenue"

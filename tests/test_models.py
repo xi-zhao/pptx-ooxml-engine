@@ -111,6 +111,38 @@ def test_parse_copy_and_create_ops() -> None:
                     "slide_index": 0,
                     "shape_names": ["a", "b", "c"],
                     "direction": "horizontal"
+                },
+                {
+                    "op": "fill_placeholder",
+                    "slide_index": 0,
+                    "placeholder_type": "title",
+                    "text": "标题"
+                },
+                {
+                    "op": "set_shape_geometry",
+                    "slide_index": 0,
+                    "shape_name": "a",
+                    "x_inches": 1.2,
+                    "y_inches": 2.1
+                },
+                {
+                    "op": "set_shape_z_order",
+                    "slide_index": 0,
+                    "shape_name": "a",
+                    "action": "bring_to_front"
+                },
+                {
+                    "op": "add_chart",
+                    "slide_index": 0,
+                    "chart_type": "column_clustered",
+                    "x_inches": 1,
+                    "y_inches": 1,
+                    "width_inches": 4,
+                    "height_inches": 2,
+                    "categories": ["Q1", "Q2"],
+                    "series": [
+                        {"name": "收入", "values": [1, 2]}
+                    ]
                 }
             ],
         }
@@ -119,7 +151,7 @@ def test_parse_copy_and_create_ops() -> None:
     ops = parse_ops(plan.model_dump())
     assert plan.template_pptx == "/tmp/template_master.pptx"
     assert plan.reuse_slide_libraries == ["/tmp/reuse_library_a.pptx"]
-    assert len(ops) == 15
+    assert len(ops) == 19
     assert ops[0].op == "copy_slide"
     assert ops[0].reuse_library_index == 0
     assert ops[1].op == "delete_slide"
@@ -136,6 +168,10 @@ def test_parse_copy_and_create_ops() -> None:
     assert ops[12].op == "set_slide_background"
     assert ops[13].op == "align_shapes"
     assert ops[14].op == "distribute_shapes"
+    assert ops[15].op == "fill_placeholder"
+    assert ops[16].op == "set_shape_geometry"
+    assert ops[17].op == "set_shape_z_order"
+    assert ops[18].op == "add_chart"
 
 
 def test_set_shape_text_requires_shape_target() -> None:
@@ -149,6 +185,31 @@ def test_set_shape_text_requires_shape_target() -> None:
                         "op": "set_shape_text",
                         "slide_index": 0,
                         "text": "missing target",
+                    }
+                ]
+            }
+        )
+
+
+def test_add_chart_series_values_must_match_categories() -> None:
+    from pptx_ooxml_engine.models import parse_plan
+
+    with pytest.raises(ValueError):
+        parse_plan(
+            {
+                "operations": [
+                    {
+                        "op": "add_chart",
+                        "slide_index": 0,
+                        "chart_type": "line",
+                        "x_inches": 1,
+                        "y_inches": 1,
+                        "width_inches": 3,
+                        "height_inches": 2,
+                        "categories": ["Q1", "Q2", "Q3"],
+                        "series": [
+                            {"name": "s1", "values": [1, 2]}
+                        ],
                     }
                 ]
             }

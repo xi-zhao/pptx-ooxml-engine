@@ -188,6 +188,94 @@ class SetSlideBackgroundOp(BaseModel):
     color_hex: str = Field(pattern=HEX_COLOR_PATTERN)
 
 
+class FillPlaceholderOp(BaseModel):
+    op: Literal["fill_placeholder"]
+    slide_index: int = Field(ge=0)
+    placeholder_idx: int | None = Field(default=None, ge=0)
+    placeholder_type: Literal["title", "body", "subtitle", "picture", "object"] | None = None
+    text: str | None = None
+    paragraphs: list[ParagraphSpec] = Field(default_factory=list)
+    image_path: str | None = None
+
+    @model_validator(mode="after")
+    def _check_selector_and_payload(self) -> "FillPlaceholderOp":
+        if self.placeholder_idx is None and self.placeholder_type is None:
+            raise ValueError("fill_placeholder requires placeholder_idx or placeholder_type")
+        if self.text is None and not self.paragraphs and self.image_path is None:
+            raise ValueError("fill_placeholder requires text, paragraphs, or image_path")
+        return self
+
+
+class SetShapeGeometryOp(BaseModel):
+    op: Literal["set_shape_geometry"]
+    slide_index: int = Field(ge=0)
+    shape_name: str | None = None
+    shape_index: int | None = Field(default=None, ge=0)
+    x_inches: float | None = Field(default=None, ge=0)
+    y_inches: float | None = Field(default=None, ge=0)
+    width_inches: float | None = Field(default=None, gt=0)
+    height_inches: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_target_and_payload(self) -> "SetShapeGeometryOp":
+        if self.shape_name is None and self.shape_index is None:
+            raise ValueError("set_shape_geometry requires shape_name or shape_index")
+        if (
+            self.x_inches is None
+            and self.y_inches is None
+            and self.width_inches is None
+            and self.height_inches is None
+        ):
+            raise ValueError("set_shape_geometry requires at least one geometry field")
+        return self
+
+
+class SetShapeZOrderOp(BaseModel):
+    op: Literal["set_shape_z_order"]
+    slide_index: int = Field(ge=0)
+    shape_name: str | None = None
+    shape_index: int | None = Field(default=None, ge=0)
+    action: Literal["bring_to_front", "send_to_back", "bring_forward", "send_backward"]
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "SetShapeZOrderOp":
+        if self.shape_name is None and self.shape_index is None:
+            raise ValueError("set_shape_z_order requires shape_name or shape_index")
+        return self
+
+
+class ChartSeriesSpec(BaseModel):
+    name: str
+    values: list[float]
+
+    @model_validator(mode="after")
+    def _check_values(self) -> "ChartSeriesSpec":
+        if not self.values:
+            raise ValueError("chart series requires non-empty values")
+        return self
+
+
+class AddChartOp(BaseModel):
+    op: Literal["add_chart"]
+    slide_index: int = Field(ge=0)
+    chart_type: Literal["column_clustered", "line", "pie"]
+    x_inches: float = Field(ge=0)
+    y_inches: float = Field(ge=0)
+    width_inches: float = Field(gt=0)
+    height_inches: float = Field(gt=0)
+    categories: list[str] = Field(min_length=1)
+    series: list[ChartSeriesSpec] = Field(min_length=1)
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def _check_series_length(self) -> "AddChartOp":
+        category_len = len(self.categories)
+        for item in self.series:
+            if len(item.values) != category_len:
+                raise ValueError("add_chart series values length must match categories length")
+        return self
+
+
 class AlignShapesOp(BaseModel):
     op: Literal["align_shapes"]
     slide_index: int = Field(ge=0)
@@ -219,6 +307,10 @@ Operation = Annotated[
         AddShapeOp,
         AddTableOp,
         SetSlideBackgroundOp,
+        FillPlaceholderOp,
+        SetShapeGeometryOp,
+        SetShapeZOrderOp,
+        AddChartOp,
         AlignShapesOp,
         DistributeShapesOp,
     ],
