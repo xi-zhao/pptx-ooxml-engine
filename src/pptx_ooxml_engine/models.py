@@ -41,8 +41,55 @@ class RewriteTextOp(BaseModel):
     occurrence: Literal["first", "all"] = "all"
 
 
+class DeleteSlideOp(BaseModel):
+    op: Literal["delete_slide"]
+    slide_index: int = Field(ge=0)
+
+
+class MoveSlideOp(BaseModel):
+    op: Literal["move_slide"]
+    from_index: int = Field(ge=0)
+    to_index: int = Field(ge=0)
+
+
+class SetSlideSizeOp(BaseModel):
+    op: Literal["set_slide_size"]
+    preset: Literal["16:9", "4:3"] | None = None
+    width_inches: float | None = Field(default=None, gt=0)
+    height_inches: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_size_input(self) -> "SetSlideSizeOp":
+        if self.preset is not None and (self.width_inches is not None or self.height_inches is not None):
+            raise ValueError("set_slide_size: do not provide width/height when preset is used")
+        if self.preset is None and (self.width_inches is None or self.height_inches is None):
+            raise ValueError("set_slide_size requires preset or both width_inches and height_inches")
+        return self
+
+
+class SetSlideLayoutOp(BaseModel):
+    op: Literal["set_slide_layout"]
+    slide_index: int = Field(ge=0)
+    layout_index: int = Field(ge=0)
+
+
+class SetNotesOp(BaseModel):
+    op: Literal["set_notes"]
+    slide_index: int = Field(ge=0)
+    text: str
+
+
 Operation = Annotated[
-    Union[CopySlideOp, CreateSlideOnLayoutOp, RewriteTextOp],
+    Union[
+        CopySlideOp,
+        CreateSlideOnLayoutOp,
+        RewriteTextOp,
+        DeleteSlideOp,
+        MoveSlideOp,
+        SetSlideSizeOp,
+        SetSlideLayoutOp,
+        SetNotesOp,
+    ],
     Field(discriminator="op"),
 ]
 

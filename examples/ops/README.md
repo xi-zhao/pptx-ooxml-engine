@@ -6,9 +6,10 @@ This folder contains minimal operation-plan examples for `pptx-ooxml-engine`.
 
 - `01_template_only_generate.json`:
   - Generate slides from a master/layout template only.
+  - Demonstrates `delete_slide` to remove the template's initial slide.
 - `02_template_plus_reuse_library.json`:
   - Generate with both template and reusable slide library.
-  - Uses `copy_slide` + `reuse_library_index`.
+  - Uses `delete_slide` + `copy_slide` + `reuse_library_index`.
 
 ## Run
 

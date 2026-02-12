@@ -28,6 +28,11 @@ Last Updated: 2026-02-12
 - 跨文件复制页面（`copy_slide`）
 - 通过 layout 新建页面（`create_slide_on_layout`）
 - 文本替换改写（`rewrite_text`）
+- 删除页面（`delete_slide`）
+- 页面重排（`move_slide`）
+- 页面尺寸设置（`set_slide_size`）
+- 页面版式重设（`set_slide_layout`）
+- 备注写入（`set_notes`）
 - OOXML 结构级校验（`verify_pptx`）
 - Python API + CLI 执行入口
 
@@ -42,7 +47,7 @@ Last Updated: 2026-02-12
 
 - `template_pptx`: **母版模板文件**（master/layout 来源），不是复用页本身。
 - `reuse_slide_libraries`: 可复用页面库列表（历史 PPT 或页库文件）。
-- `operation`: 单个原子操作（copy/create/rewrite）。
+- `operation`: 单个原子操作（copy/create/rewrite/delete/move/size/layout/notes）。
 - `operation plan`: 顶层执行计划对象，包含模板、页库和操作列表。
 - `verify`: 执行后结构校验步骤。
 
@@ -136,6 +141,98 @@ Last Updated: 2026-02-12
 
 - 替换以 `shape.text_frame.text` 粒度执行（段落样式不做细粒保留）。
 - 若找不到可替换文本，抛 `ValueError`。
+
+## 6.4 `delete_slide`
+
+用途：按索引删除当前输出中的页面。
+
+字段：
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"delete_slide"` | Yes | 操作类型 |
+| `slide_index` | `int` (`>=0`) | Yes | 要删除页面的 0-based 索引 |
+
+行为说明：
+
+- 删除通过移除 slide 关系与 slide id 列表条目完成。
+- 典型用途是移除模板初始页。
+
+错误条件：
+
+- `slide_index` 越界。
+
+## 6.5 `move_slide`
+
+用途：在演示文稿内部移动页面顺序。
+
+字段：
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"move_slide"` | Yes | 操作类型 |
+| `from_index` | `int` (`>=0`) | Yes | 原位置索引 |
+| `to_index` | `int` (`>=0`) | Yes | 目标位置索引 |
+
+错误条件：
+
+- `from_index` 或 `to_index` 越界。
+
+## 6.6 `set_slide_size`
+
+用途：设置演示文稿画布尺寸。
+
+字段：
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"set_slide_size"` | Yes | 操作类型 |
+| `preset` | `"16:9" \| "4:3" \| null` | Conditional | 预设尺寸（与自定义尺寸二选一） |
+| `width_inches` | `float \| null` (`>0`) | Conditional | 自定义宽度（英寸） |
+| `height_inches` | `float \| null` (`>0`) | Conditional | 自定义高度（英寸） |
+
+行为说明：
+
+- `preset=16:9` -> `13.333 x 7.5` 英寸
+- `preset=4:3` -> `10 x 7.5` 英寸
+
+错误条件：
+
+- 同时设置 `preset` 与 `width/height`
+- 未设置 `preset` 且未提供 `width/height`
+
+## 6.7 `set_slide_layout`
+
+用途：将指定页面的 layout 关系重绑到目标 layout。
+
+字段：
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"set_slide_layout"` | Yes | 操作类型 |
+| `slide_index` | `int` (`>=0`) | Yes | 目标页面 |
+| `layout_index` | `int` (`>=0`) | Yes | 目标 layout 索引 |
+
+错误条件：
+
+- `slide_index` 越界
+- `layout_index` 越界
+
+## 6.8 `set_notes`
+
+用途：设置页面备注（讲稿区）文本。
+
+字段：
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"set_notes"` | Yes | 操作类型 |
+| `slide_index` | `int` (`>=0`) | Yes | 目标页面 |
+| `text` | `string` | Yes | 备注文本 |
+
+错误条件：
+
+- `slide_index` 越界。
 
 ## 7. Execution Semantics / 执行语义
 

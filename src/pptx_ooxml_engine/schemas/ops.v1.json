@@ -58,6 +58,60 @@
               "occurrence": { "type": "string", "enum": ["first", "all"] }
             },
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index"],
+            "properties": {
+              "op": { "const": "delete_slide" },
+              "slide_index": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "from_index", "to_index"],
+            "properties": {
+              "op": { "const": "move_slide" },
+              "from_index": { "type": "integer", "minimum": 0 },
+              "to_index": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op"],
+            "properties": {
+              "op": { "const": "set_slide_size" },
+              "preset": { "type": "string", "enum": ["16:9", "4:3"] },
+              "width_inches": { "type": "number", "exclusiveMinimum": 0 },
+              "height_inches": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "anyOf": [
+              { "required": ["preset"] },
+              { "required": ["width_inches", "height_inches"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "layout_index"],
+            "properties": {
+              "op": { "const": "set_slide_layout" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "layout_index": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "text"],
+            "properties": {
+              "op": { "const": "set_notes" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "text": { "type": "string" }
+            },
+            "additionalProperties": false
           }
         ]
       }

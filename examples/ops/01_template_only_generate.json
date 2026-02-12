@@ -2,6 +2,10 @@
   "template_pptx": "resources/theme1.pptx",
   "operations": [
     {
+      "op": "delete_slide",
+      "slide_index": 0
+    },
+    {
       "op": "create_slide_on_layout",
       "layout_index": 0,
       "title": "执行摘要",

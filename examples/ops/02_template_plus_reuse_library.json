@@ -5,6 +5,10 @@
   ],
   "operations": [
     {
+      "op": "delete_slide",
+      "slide_index": 0
+    },
+    {
       "op": "copy_slide",
       "reuse_library_index": 0,
       "source_slide_index": 0,

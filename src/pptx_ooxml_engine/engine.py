@@ -6,18 +6,26 @@ from pathlib import Path
 from typing import Iterable
 
 from pptx.slide import Slide
+from pptx.util import Inches
 
 from .models import (
     CopyMode,
     CopySlideOp,
     CreateSlideOnLayoutOp,
+    DeleteSlideOp,
+    MoveSlideOp,
     Operation,
     OperationPlan,
     RewriteTextOp,
+    SetNotesOp,
+    SetSlideLayoutOp,
+    SetSlideSizeOp,
     parse_plan,
     parse_ops,
 )
 from .verify import verify_pptx
+
+_SLIDE_LAYOUT_RELTYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
 
 
 def _import_copy_ops():
@@ -109,6 +117,67 @@ def _apply_create(op: CreateSlideOnLayoutOp, presentation) -> None:
         _set_slide_body(slide, op.body)
 
 
+def _apply_delete(op: DeleteSlideOp, presentation) -> None:
+    if op.slide_index >= len(presentation.slides):
+        raise IndexError(
+            f"delete_slide slide_index out of range: {op.slide_index}, total={len(presentation.slides)}"
+        )
+    r_id = presentation.slides._sldIdLst[op.slide_index].rId
+    presentation.part.drop_rel(r_id)
+    del presentation.slides._sldIdLst[op.slide_index]
+
+
+def _apply_move(op: MoveSlideOp, presentation) -> None:
+    total = len(presentation.slides)
+    if op.from_index >= total:
+        raise IndexError(f"move_slide from_index out of range: {op.from_index}, total={total}")
+    if op.to_index >= total:
+        raise IndexError(f"move_slide to_index out of range: {op.to_index}, total={total}")
+    if op.from_index == op.to_index:
+        return
+    slide_id = presentation.slides._sldIdLst[op.from_index]
+    presentation.slides._sldIdLst.remove(slide_id)
+    presentation.slides._sldIdLst.insert(op.to_index, slide_id)
+
+
+def _apply_set_slide_size(op: SetSlideSizeOp, presentation) -> None:
+    if op.preset == "16:9":
+        width_inches, height_inches = 13.333, 7.5
+    elif op.preset == "4:3":
+        width_inches, height_inches = 10.0, 7.5
+    else:
+        width_inches = float(op.width_inches)  # validated non-null by model
+        height_inches = float(op.height_inches)
+    presentation.slide_width = Inches(width_inches)
+    presentation.slide_height = Inches(height_inches)
+
+
+def _apply_set_slide_layout(op: SetSlideLayoutOp, presentation) -> None:
+    if op.slide_index >= len(presentation.slides):
+        raise IndexError(
+            f"set_slide_layout slide_index out of range: {op.slide_index}, total={len(presentation.slides)}"
+        )
+    if op.layout_index >= len(presentation.slide_layouts):
+        raise IndexError(
+            f"set_slide_layout layout_index out of range: {op.layout_index}, total={len(presentation.slide_layouts)}"
+        )
+    slide = presentation.slides[op.slide_index]
+    target_layout = presentation.slide_layouts[op.layout_index]
+    for rel in list(slide.part.rels.values()):
+        if rel.reltype == _SLIDE_LAYOUT_RELTYPE:
+            slide.part.drop_rel(rel.rId)
+    slide.part.relate_to(target_layout.part, _SLIDE_LAYOUT_RELTYPE)
+
+
+def _apply_set_notes(op: SetNotesOp, presentation) -> None:
+    if op.slide_index >= len(presentation.slides):
+        raise IndexError(
+            f"set_notes slide_index out of range: {op.slide_index}, total={len(presentation.slides)}"
+        )
+    slide = presentation.slides[op.slide_index]
+    slide.notes_slide.notes_text_frame.text = op.text
+
+
 def _to_operations(raw_ops: Iterable[Operation] | list[dict] | dict) -> tuple[list[Operation], OperationPlan | None]:
     if isinstance(raw_ops, dict):
         plan = parse_plan(raw_ops)
@@ -171,6 +240,21 @@ def apply_ops(
             continue
         if isinstance(op, RewriteTextOp):
             _apply_rewrite(op, presentation)
+            continue
+        if isinstance(op, DeleteSlideOp):
+            _apply_delete(op, presentation)
+            continue
+        if isinstance(op, MoveSlideOp):
+            _apply_move(op, presentation)
+            continue
+        if isinstance(op, SetSlideSizeOp):
+            _apply_set_slide_size(op, presentation)
+            continue
+        if isinstance(op, SetSlideLayoutOp):
+            _apply_set_slide_layout(op, presentation)
+            continue
+        if isinstance(op, SetNotesOp):
+            _apply_set_notes(op, presentation)
             continue
         raise ValueError(f"Unsupported operation type: {type(op)!r}")
 

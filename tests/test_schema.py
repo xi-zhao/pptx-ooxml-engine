@@ -9,3 +9,19 @@ def test_load_ops_schema() -> None:
     assert "operations" in schema["properties"]
     assert "template_pptx" in schema["properties"]
     assert "reuse_slide_libraries" in schema["properties"]
+    one_of = schema["properties"]["operations"]["items"]["oneOf"]
+    op_consts = {
+        item.get("properties", {}).get("op", {}).get("const")
+        for item in one_of
+    }
+    expected = {
+        "copy_slide",
+        "create_slide_on_layout",
+        "rewrite_text",
+        "delete_slide",
+        "move_slide",
+        "set_slide_size",
+        "set_slide_layout",
+        "set_notes",
+    }
+    assert expected.issubset(op_consts)
