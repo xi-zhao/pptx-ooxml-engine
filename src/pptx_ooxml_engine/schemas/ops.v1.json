@@ -381,6 +381,89 @@
           },
           {
             "type": "object",
+            "required": ["op", "slide_index"],
+            "properties": {
+              "op": { "const": "set_table_cell" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "table_name": { "type": "string" },
+              "table_index": { "type": "integer", "minimum": 0 },
+              "row": { "type": "integer", "minimum": 0 },
+              "col": { "type": "integer", "minimum": 0 },
+              "text": { "type": "string" },
+              "bold": { "type": "boolean" },
+              "italic": { "type": "boolean" },
+              "font_size_pt": { "type": "number", "exclusiveMinimum": 0 },
+              "text_color_hex": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+              "fill_color_hex": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+              "alignment": { "type": "string", "enum": ["left", "center", "right", "justify"] }
+            },
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["table_name"] },
+                  { "required": ["table_index"] }
+                ]
+              },
+              {
+                "required": ["row", "col"]
+              }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "start_row", "start_col", "end_row", "end_col"],
+            "properties": {
+              "op": { "const": "merge_table_cells" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "table_name": { "type": "string" },
+              "table_index": { "type": "integer", "minimum": 0 },
+              "start_row": { "type": "integer", "minimum": 0 },
+              "start_col": { "type": "integer", "minimum": 0 },
+              "end_row": { "type": "integer", "minimum": 0 },
+              "end_col": { "type": "integer", "minimum": 0 }
+            },
+            "anyOf": [
+              { "required": ["table_name"] },
+              { "required": ["table_index"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "url"],
+            "properties": {
+              "op": { "const": "set_shape_hyperlink" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "shape_name": { "type": "string" },
+              "shape_index": { "type": "integer", "minimum": 0 },
+              "url": { "type": "string", "minLength": 1 }
+            },
+            "anyOf": [
+              { "required": ["shape_name"] },
+              { "required": ["shape_index"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["op", "slide_index", "image_path"],
+            "properties": {
+              "op": { "const": "replace_image" },
+              "slide_index": { "type": "integer", "minimum": 0 },
+              "shape_name": { "type": "string" },
+              "shape_index": { "type": "integer", "minimum": 0 },
+              "image_path": { "type": "string", "minLength": 1 },
+              "fit": { "type": "string", "enum": ["stretch", "contain", "cover"] }
+            },
+            "anyOf": [
+              { "required": ["shape_name"] },
+              { "required": ["shape_index"] }
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
             "required": ["op", "slide_index", "shape_names", "align"],
             "properties": {
               "op": { "const": "align_shapes" },

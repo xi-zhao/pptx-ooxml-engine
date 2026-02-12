@@ -182,6 +182,47 @@ class AddTableOp(BaseModel):
         return self
 
 
+class SetTableCellOp(BaseModel):
+    op: Literal["set_table_cell"]
+    slide_index: int = Field(ge=0)
+    table_name: str | None = None
+    table_index: int | None = Field(default=None, ge=0)
+    row: int = Field(ge=0)
+    col: int = Field(ge=0)
+    text: str | None = None
+    bold: bool | None = None
+    italic: bool | None = None
+    font_size_pt: float | None = Field(default=None, gt=0)
+    text_color_hex: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    fill_color_hex: str | None = Field(default=None, pattern=HEX_COLOR_PATTERN)
+    alignment: Literal["left", "center", "right", "justify"] | None = None
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "SetTableCellOp":
+        if self.table_name is None and self.table_index is None:
+            raise ValueError("set_table_cell requires table_name or table_index")
+        return self
+
+
+class MergeTableCellsOp(BaseModel):
+    op: Literal["merge_table_cells"]
+    slide_index: int = Field(ge=0)
+    table_name: str | None = None
+    table_index: int | None = Field(default=None, ge=0)
+    start_row: int = Field(ge=0)
+    start_col: int = Field(ge=0)
+    end_row: int = Field(ge=0)
+    end_col: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _check_target_and_range(self) -> "MergeTableCellsOp":
+        if self.table_name is None and self.table_index is None:
+            raise ValueError("merge_table_cells requires table_name or table_index")
+        if self.end_row < self.start_row or self.end_col < self.start_col:
+            raise ValueError("merge_table_cells end position must be >= start position")
+        return self
+
+
 class SetSlideBackgroundOp(BaseModel):
     op: Literal["set_slide_background"]
     slide_index: int = Field(ge=0)
@@ -276,6 +317,35 @@ class AddChartOp(BaseModel):
         return self
 
 
+class SetShapeHyperlinkOp(BaseModel):
+    op: Literal["set_shape_hyperlink"]
+    slide_index: int = Field(ge=0)
+    shape_name: str | None = None
+    shape_index: int | None = Field(default=None, ge=0)
+    url: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "SetShapeHyperlinkOp":
+        if self.shape_name is None and self.shape_index is None:
+            raise ValueError("set_shape_hyperlink requires shape_name or shape_index")
+        return self
+
+
+class ReplaceImageOp(BaseModel):
+    op: Literal["replace_image"]
+    slide_index: int = Field(ge=0)
+    shape_name: str | None = None
+    shape_index: int | None = Field(default=None, ge=0)
+    image_path: str = Field(min_length=1)
+    fit: Literal["stretch", "contain", "cover"] = "stretch"
+
+    @model_validator(mode="after")
+    def _check_target(self) -> "ReplaceImageOp":
+        if self.shape_name is None and self.shape_index is None:
+            raise ValueError("replace_image requires shape_name or shape_index")
+        return self
+
+
 class AlignShapesOp(BaseModel):
     op: Literal["align_shapes"]
     slide_index: int = Field(ge=0)
@@ -306,11 +376,15 @@ Operation = Annotated[
         AddImageOp,
         AddShapeOp,
         AddTableOp,
+        SetTableCellOp,
+        MergeTableCellsOp,
         SetSlideBackgroundOp,
         FillPlaceholderOp,
         SetShapeGeometryOp,
         SetShapeZOrderOp,
         AddChartOp,
+        SetShapeHyperlinkOp,
+        ReplaceImageOp,
         AlignShapesOp,
         DistributeShapesOp,
     ],

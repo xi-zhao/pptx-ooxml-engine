@@ -1,4 +1,4 @@
-# pptx-ooxml-engine Specification (v1.1.0)
+# pptx-ooxml-engine Specification (v1.2.0)
 
 ## 1. Purpose / 目标
 
@@ -67,6 +67,10 @@
 - `set_slide_background`
 - `fill_placeholder`
 - `add_chart`
+- `replace_image`
+- `set_table_cell`
+- `merge_table_cells`
+- `set_shape_hyperlink`
 
 ### 5.3 Layout Ops / 排版操作
 
@@ -210,6 +214,49 @@
 - `categories: string[]`（非空）
 - `series: ChartSeriesSpec[]`（非空，且每个 series 的 values 长度必须与 categories 一致）
 - `name?: str`
+
+### `replace_image`
+- `op: "replace_image"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- `image_path: str`
+- `fit?: "stretch" | "contain" | "cover"`（默认 `stretch`）
+
+### `set_table_cell`
+- `op: "set_table_cell"`
+- `slide_index: int >= 0`
+- Required one of:
+- `table_name: str`
+- `table_index: int >= 0`
+- `row: int >= 0`
+- `col: int >= 0`
+- Optional content/style:
+- `text?: str`
+- `bold?: bool`
+- `italic?: bool`
+- `font_size_pt?: float > 0`
+- `text_color_hex?: RRGGBB | #RRGGBB`
+- `fill_color_hex?: RRGGBB | #RRGGBB`
+- `alignment?: "left" | "center" | "right" | "justify"`
+
+### `merge_table_cells`
+- `op: "merge_table_cells"`
+- `slide_index: int >= 0`
+- Required one of:
+- `table_name: str`
+- `table_index: int >= 0`
+- `start_row, start_col, end_row, end_col: int >= 0`
+- `end_row >= start_row` 且 `end_col >= start_col`
+
+### `set_shape_hyperlink`
+- `op: "set_shape_hyperlink"`
+- `slide_index: int >= 0`
+- Required one of:
+- `shape_name: str`
+- `shape_index: int >= 0`
+- `url: str`
 
 ### `align_shapes`
 - `op: "align_shapes"`

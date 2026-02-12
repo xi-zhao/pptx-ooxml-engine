@@ -19,7 +19,7 @@ This package is the **execution layer** for planners/agents.
 - It executes validated operation plans.
 - `template_pptx` means a master/layout template (not reusable slide pages).
 
-## Features (v1.1.0)
+## Features (v1.2.0)
 
 Structure:
 - `copy_slide` (`part` / `shape`)
@@ -40,6 +40,10 @@ Content:
 - `set_slide_background`
 - `fill_placeholder`
 - `add_chart`
+- `replace_image`
+- `set_table_cell`
+- `merge_table_cells`
+- `set_shape_hyperlink`
 
 Layout:
 - `align_shapes`

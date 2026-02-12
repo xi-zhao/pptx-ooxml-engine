@@ -33,6 +33,10 @@ def test_load_ops_schema() -> None:
         "set_shape_geometry",
         "set_shape_z_order",
         "add_chart",
+        "set_table_cell",
+        "merge_table_cells",
+        "set_shape_hyperlink",
+        "replace_image",
         "align_shapes",
         "distribute_shapes",
     }

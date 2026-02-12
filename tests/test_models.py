@@ -143,6 +143,35 @@ def test_parse_copy_and_create_ops() -> None:
                     "series": [
                         {"name": "收入", "values": [1, 2]}
                     ]
+                },
+                {
+                    "op": "set_table_cell",
+                    "slide_index": 0,
+                    "table_name": "tbl",
+                    "row": 0,
+                    "col": 0,
+                    "text": "A1"
+                },
+                {
+                    "op": "merge_table_cells",
+                    "slide_index": 0,
+                    "table_name": "tbl",
+                    "start_row": 0,
+                    "start_col": 0,
+                    "end_row": 0,
+                    "end_col": 1
+                },
+                {
+                    "op": "set_shape_hyperlink",
+                    "slide_index": 0,
+                    "shape_name": "btn",
+                    "url": "https://example.com"
+                },
+                {
+                    "op": "replace_image",
+                    "slide_index": 0,
+                    "shape_name": "logo",
+                    "image_path": "/tmp/b.png"
                 }
             ],
         }
@@ -151,7 +180,7 @@ def test_parse_copy_and_create_ops() -> None:
     ops = parse_ops(plan.model_dump())
     assert plan.template_pptx == "/tmp/template_master.pptx"
     assert plan.reuse_slide_libraries == ["/tmp/reuse_library_a.pptx"]
-    assert len(ops) == 19
+    assert len(ops) == 23
     assert ops[0].op == "copy_slide"
     assert ops[0].reuse_library_index == 0
     assert ops[1].op == "delete_slide"
@@ -172,6 +201,10 @@ def test_parse_copy_and_create_ops() -> None:
     assert ops[16].op == "set_shape_geometry"
     assert ops[17].op == "set_shape_z_order"
     assert ops[18].op == "add_chart"
+    assert ops[19].op == "set_table_cell"
+    assert ops[20].op == "merge_table_cells"
+    assert ops[21].op == "set_shape_hyperlink"
+    assert ops[22].op == "replace_image"
 
 
 def test_set_shape_text_requires_shape_target() -> None:
@@ -210,6 +243,23 @@ def test_add_chart_series_values_must_match_categories() -> None:
                         "series": [
                             {"name": "s1", "values": [1, 2]}
                         ],
+                    }
+                ]
+            }
+        )
+
+
+def test_replace_image_requires_target() -> None:
+    from pptx_ooxml_engine.models import parse_plan
+
+    with pytest.raises(ValueError):
+        parse_plan(
+            {
+                "operations": [
+                    {
+                        "op": "replace_image",
+                        "slide_index": 0,
+                        "image_path": "/tmp/a.png",
                     }
                 ]
             }

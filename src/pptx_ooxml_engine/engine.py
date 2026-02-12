@@ -29,18 +29,22 @@ from .models import (
     DeleteSlideOp,
     DistributeShapesOp,
     FillPlaceholderOp,
+    MergeTableCellsOp,
     MoveSlideOp,
     Operation,
     OperationPlan,
     ParagraphSpec,
+    ReplaceImageOp,
     RewriteTextOp,
     SetNotesOp,
     SetShapeGeometryOp,
+    SetShapeHyperlinkOp,
     SetShapeTextOp,
     SetShapeZOrderOp,
     SetSlideBackgroundOp,
     SetSlideLayoutOp,
     SetSlideSizeOp,
+    SetTableCellOp,
     parse_plan,
     parse_ops,
 )
@@ -153,6 +157,29 @@ def _shape_for_target(slide: Slide, shape_name: str | None, shape_index: int | N
     raise ValueError("shape target is required")
 
 
+def _table_for_target(slide: Slide, table_name: str | None, table_index: int | None):
+    table_shapes = [shape for shape in slide.shapes if getattr(shape, "has_table", False)]
+    if table_name is not None:
+        for shape in table_shapes:
+            if shape.name == table_name:
+                return shape.table
+        raise ValueError(f"table not found by name: {table_name}")
+    if table_index is not None:
+        if table_index >= len(table_shapes):
+            raise IndexError(f"table_index out of range: {table_index}, total={len(table_shapes)}")
+        return table_shapes[table_index].table
+    raise ValueError("table target is required")
+
+
+def _table_cell_or_raise(table, row: int, col: int, op_name: str):
+    if row >= len(table.rows) or col >= len(table.columns):
+        raise IndexError(
+            f"{op_name} cell out of range: row={row}, col={col}, "
+            f"total_rows={len(table.rows)}, total_cols={len(table.columns)}"
+        )
+    return table.cell(row, col)
+
+
 def _placeholder_for_target(
     slide: Slide,
     placeholder_idx: int | None,
@@ -187,6 +214,43 @@ def _draw_node_indices(sp_tree) -> list[int]:
 def _move_shape_tree_node(sp_tree, element, target_idx: int) -> None:
     sp_tree.remove(element)
     sp_tree.insert(target_idx, element)
+
+
+def _apply_picture_fit(pic, fit: str, box_w, box_h) -> None:
+    iw_px, ih_px = pic.image.size
+    image_ratio = iw_px / ih_px if ih_px else 1.0
+    box_ratio = box_w / box_h if box_h else 1.0
+
+    if fit == "contain":
+        if image_ratio > box_ratio:
+            new_w = box_w
+            new_h = int(box_w / image_ratio)
+            pic.top = pic.top + int((box_h - new_h) / 2)
+        else:
+            new_h = box_h
+            new_w = int(box_h * image_ratio)
+            pic.left = pic.left + int((box_w - new_w) / 2)
+        pic.width = int(new_w)
+        pic.height = int(new_h)
+    elif fit == "cover":
+        if image_ratio > box_ratio:
+            target_w = ih_px * box_ratio
+            crop = (iw_px - target_w) / (2 * iw_px)
+            pic.crop_left = crop
+            pic.crop_right = crop
+        elif image_ratio < box_ratio:
+            target_h = iw_px / box_ratio
+            crop = (ih_px - target_h) / (2 * ih_px)
+            pic.crop_top = crop
+            pic.crop_bottom = crop
+
+
+def _insert_picture_with_fit(slide: Slide, image_path: Path, x, y, box_w, box_h, fit: str, name: str | None):
+    pic = slide.shapes.add_picture(str(image_path), x, y, box_w, box_h)
+    _apply_picture_fit(pic, fit, box_w, box_h)
+    if name:
+        pic.name = name
+    return pic
 
 
 def _set_paragraph_list_style(paragraph, list_type: str) -> None:
@@ -385,39 +449,7 @@ def _apply_add_image(op: AddImageOp, presentation: Presentation) -> None:
     y = Inches(op.y_inches)
     box_w = Inches(op.width_inches)
     box_h = Inches(op.height_inches)
-
-    pic = slide.shapes.add_picture(str(image_path), x, y, box_w, box_h)
-    iw_px, ih_px = pic.image.size
-    image_ratio = iw_px / ih_px if ih_px else 1.0
-    box_ratio = box_w / box_h if box_h else 1.0
-
-    if op.fit == "contain":
-        if image_ratio > box_ratio:
-            new_w = box_w
-            new_h = int(box_w / image_ratio)
-            pic.left = x
-            pic.top = y + int((box_h - new_h) / 2)
-        else:
-            new_h = box_h
-            new_w = int(box_h * image_ratio)
-            pic.left = x + int((box_w - new_w) / 2)
-            pic.top = y
-        pic.width = int(new_w)
-        pic.height = int(new_h)
-    elif op.fit == "cover":
-        if image_ratio > box_ratio:
-            target_w = ih_px * box_ratio
-            crop = (iw_px - target_w) / (2 * iw_px)
-            pic.crop_left = crop
-            pic.crop_right = crop
-        elif image_ratio < box_ratio:
-            target_h = iw_px / box_ratio
-            crop = (ih_px - target_h) / (2 * ih_px)
-            pic.crop_top = crop
-            pic.crop_bottom = crop
-
-    if op.name:
-        pic.name = op.name
+    _insert_picture_with_fit(slide, image_path, x, y, box_w, box_h, op.fit, op.name)
 
 
 def _apply_add_shape(op: AddShapeOp, presentation: Presentation) -> None:
@@ -578,6 +610,65 @@ def _apply_add_chart(op: AddChartOp, presentation: Presentation) -> None:
     )
     if op.name:
         chart_shape.name = op.name
+
+
+def _apply_set_table_cell(op: SetTableCellOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_table_cell")
+    table = _table_for_target(slide, op.table_name, op.table_index)
+    cell = _table_cell_or_raise(table, op.row, op.col, "set_table_cell")
+    if op.text is not None:
+        cell.text_frame.text = op.text
+    paragraph = cell.text_frame.paragraphs[0]
+    if op.alignment is not None:
+        paragraph.alignment = _ALIGN_MAP[op.alignment]
+    if op.bold is not None:
+        paragraph.font.bold = op.bold
+    if op.italic is not None:
+        paragraph.font.italic = op.italic
+    if op.font_size_pt is not None:
+        paragraph.font.size = Pt(op.font_size_pt)
+    if op.text_color_hex is not None:
+        paragraph.font.color.rgb = _hex_to_rgb(op.text_color_hex)
+    if op.fill_color_hex is not None:
+        cell.fill.solid()
+        cell.fill.fore_color.rgb = _hex_to_rgb(op.fill_color_hex)
+
+
+def _apply_merge_table_cells(op: MergeTableCellsOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "merge_table_cells")
+    table = _table_for_target(slide, op.table_name, op.table_index)
+    start_cell = _table_cell_or_raise(table, op.start_row, op.start_col, "merge_table_cells")
+    end_cell = _table_cell_or_raise(table, op.end_row, op.end_col, "merge_table_cells")
+    start_cell.merge(end_cell)
+
+
+def _apply_set_shape_hyperlink(op: SetShapeHyperlinkOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "set_shape_hyperlink")
+    shape = _shape_for_target(slide, op.shape_name, op.shape_index)
+    shape.click_action.hyperlink.address = op.url
+
+
+def _apply_replace_image(op: ReplaceImageOp, presentation: Presentation) -> None:
+    slide = _slide_or_raise(presentation, op.slide_index, "replace_image")
+    image_path = Path(op.image_path).expanduser().resolve()
+    if not image_path.exists():
+        raise FileNotFoundError(f"image_path not found: {image_path}")
+
+    shape = _shape_for_target(slide, op.shape_name, op.shape_index)
+    if not hasattr(shape, "image"):
+        raise ValueError(f"target shape is not an image: {shape.name}")
+
+    left, top, width, height = shape.left, shape.top, shape.width, shape.height
+    name = shape.name
+    sp_tree = slide.shapes._spTree
+    old_el = shape.element
+    old_idx = list(sp_tree).index(old_el)
+    sp_tree.remove(old_el)
+
+    new_pic = _insert_picture_with_fit(slide, image_path, left, top, width, height, op.fit, name)
+    new_el = new_pic.element
+    sp_tree.remove(new_el)
+    sp_tree.insert(old_idx, new_el)
 
 
 def _apply_align_shapes(op: AlignShapesOp, presentation: Presentation) -> None:
@@ -774,6 +865,18 @@ def apply_ops(
             continue
         if isinstance(op, AddChartOp):
             _apply_add_chart(op, presentation)
+            continue
+        if isinstance(op, SetTableCellOp):
+            _apply_set_table_cell(op, presentation)
+            continue
+        if isinstance(op, MergeTableCellsOp):
+            _apply_merge_table_cells(op, presentation)
+            continue
+        if isinstance(op, SetShapeHyperlinkOp):
+            _apply_set_shape_hyperlink(op, presentation)
+            continue
+        if isinstance(op, ReplaceImageOp):
+            _apply_replace_image(op, presentation)
             continue
         if isinstance(op, AlignShapesOp):
             _apply_align_shapes(op, presentation)

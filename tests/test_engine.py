@@ -55,6 +55,14 @@ def _write_tiny_png(path: Path) -> None:
     path.write_bytes(raw)
 
 
+def _write_tiny_png_alt(path: Path) -> None:
+    # another 1x1 PNG with different bytes
+    raw = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAS3r7QkAAAAASUVORK5CYII="
+    )
+    path.write_bytes(raw)
+
+
 def _copy_ops_available() -> bool:
     if importlib.util.find_spec("pptx_copy_ops") is not None:
         return True
@@ -496,3 +504,104 @@ def test_apply_ops_v1_1_placeholder_chart_and_layer_ops(tmp_path: Path) -> None:
     chart_shape = next(shape for shape in slide.shapes if shape.name == "kpi_chart")
     assert chart_shape.has_chart
     assert chart_shape.chart.series[0].name == "Revenue"
+
+
+def test_apply_ops_v1_2_media_table_and_link_ops(tmp_path: Path) -> None:
+    from pptx_ooxml_engine.engine import apply_ops
+
+    template = tmp_path / "template_v1_2_ops.pptx"
+    output = tmp_path / "output_v1_2_ops.pptx"
+    image_a = tmp_path / "a.png"
+    image_b = tmp_path / "b.png"
+    _build_target_pptx(template)
+    _write_tiny_png(image_a)
+    _write_tiny_png_alt(image_b)
+
+    result = apply_ops(
+        input_pptx=None,
+        ops={
+            "template_pptx": str(template),
+            "operations": [
+                {
+                    "op": "add_table",
+                    "slide_index": 0,
+                    "x_inches": 0.8,
+                    "y_inches": 1.8,
+                    "width_inches": 4.0,
+                    "height_inches": 2.0,
+                    "name": "tbl_main",
+                    "data": [["H1", "H2"], ["V1", "V2"]],
+                },
+                {
+                    "op": "set_table_cell",
+                    "slide_index": 0,
+                    "table_name": "tbl_main",
+                    "row": 1,
+                    "col": 1,
+                    "text": "V2-UPDATED",
+                    "bold": True,
+                    "fill_color_hex": "FFD966",
+                },
+                {
+                    "op": "merge_table_cells",
+                    "slide_index": 0,
+                    "table_name": "tbl_main",
+                    "start_row": 0,
+                    "start_col": 0,
+                    "end_row": 0,
+                    "end_col": 1,
+                },
+                {
+                    "op": "add_shape",
+                    "slide_index": 0,
+                    "shape_type": "rect",
+                    "x_inches": 5.2,
+                    "y_inches": 1.8,
+                    "width_inches": 2.5,
+                    "height_inches": 1.0,
+                    "name": "link_box",
+                    "text": "Open URL",
+                },
+                {
+                    "op": "set_shape_hyperlink",
+                    "slide_index": 0,
+                    "shape_name": "link_box",
+                    "url": "https://example.com",
+                },
+                {
+                    "op": "add_image",
+                    "slide_index": 0,
+                    "image_path": str(image_a),
+                    "x_inches": 5.2,
+                    "y_inches": 3.1,
+                    "width_inches": 2.0,
+                    "height_inches": 1.3,
+                    "name": "logo_box",
+                },
+                {
+                    "op": "replace_image",
+                    "slide_index": 0,
+                    "shape_name": "logo_box",
+                    "image_path": str(image_b),
+                },
+            ],
+        },
+        output_pptx=output,
+        verify=True,
+    )
+
+    assert result.output_path == output.resolve()
+    prs = Presentation(str(output))
+    slide = prs.slides[0]
+
+    tbl_shape = next(shape for shape in slide.shapes if shape.name == "tbl_main")
+    table = tbl_shape.table
+    assert table.cell(1, 1).text_frame.text == "V2-UPDATED"
+    assert table.cell(0, 0).is_merge_origin
+    assert table.cell(0, 0).span_width == 2
+
+    link_box = next(shape for shape in slide.shapes if shape.name == "link_box")
+    assert link_box.click_action.hyperlink.address == "https://example.com"
+
+    logo_shape = next(shape for shape in slide.shapes if shape.name == "logo_box")
+    assert logo_shape.image.blob == image_b.read_bytes()
